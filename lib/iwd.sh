@@ -12,9 +12,9 @@ _save_iwd_state() {
     mkdir -p "$dir" 2>/dev/null || true
     {
         printf "IWD_STATE_WAS_UP=%s\n" "$IWD_WAS_UP"
-        printf "IWD_STATE_NET=%s\n"    "$IWD_NET"
-        printf "IWD_STATE_IFACE=%s\n"  "$IFACE"
-    } > "$WAI_STATE_FILE"
+        printf "IWD_STATE_NET=%s\n" "$IWD_NET"
+        printf "IWD_STATE_IFACE=%s\n" "$IFACE"
+    } >"$WAI_STATE_FILE"
     chmod 600 "$WAI_STATE_FILE" 2>/dev/null || true
 }
 
@@ -33,9 +33,9 @@ save_and_stop_iwd() {
 
     IWD_WAS_UP=1
 
-    IWD_NET=$(iwctl station "$IFACE" show 2>/dev/null \
-        | awk '/Connected network/ {print $NF}' \
-        | tr -d '[:space:]') || true
+    IWD_NET=$(iwctl station "$IFACE" show 2>/dev/null |
+        awk '/Connected network/ {print $NF}' |
+        tr -d '[:space:]') || true
 
     if [[ -n "$IWD_NET" ]]; then
         ok "Network saved for restore: '${IWD_NET}'"
@@ -43,12 +43,12 @@ save_and_stop_iwd() {
         warn "iwd active but no network currently connected."
     fi
 
-    systemctl stop iwd 2>&1 \
-        | while IFS= read -r l; do dbg "  stop: $l"; done || true
-    systemctl mask iwd 2>&1 \
-        | while IFS= read -r l; do dbg "  mask: $l"; done || true
+    systemctl stop iwd 2>&1 |
+        while IFS= read -r l; do dbg "  stop: $l"; done || true
+    systemctl mask iwd 2>&1 |
+        while IFS= read -r l; do dbg "  mask: $l"; done || true
 
-    pkill -9 iwd    2>/dev/null || true
+    pkill -9 iwd 2>/dev/null || true
     pkill -9 dhcpcd 2>/dev/null || true
     sleep 2
 

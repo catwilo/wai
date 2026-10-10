@@ -57,8 +57,8 @@ _require_iface() {
 }
 
 _require_targets() {
-    [[ ${#TARGETS_RAW[@]} -gt 0 ]] \
-        || die "Missing required argument: -t <BSSID|SSID>"
+    [[ ${#TARGETS_RAW[@]} -gt 0 ]] ||
+        die "Missing required argument: -t <BSSID|SSID>"
 }
 
 _validate_channel() {
@@ -74,15 +74,15 @@ _validate_outdir() {
 parse_cap_args() {
     while getopts ":i:t:c:o:nVh" opt; do
         case $opt in
-            i) IFACE="$OPTARG" ;;
-            t) TARGETS_RAW+=("$OPTARG") ;;
-            c) CHANNEL="$OPTARG" ;;
-            o) OUTDIR="$OPTARG" ;;
-            n) WAI_DRY_RUN=1 ;;
-            V) version ;;
-            h) usage ;;
-            :) die "Option -${OPTARG} requires an argument." ;;
-            *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
+        i) IFACE="$OPTARG" ;;
+        t) TARGETS_RAW+=("$OPTARG") ;;
+        c) CHANNEL="$OPTARG" ;;
+        o) OUTDIR="$OPTARG" ;;
+        n) WAI_DRY_RUN=1 ;;
+        V) version ;;
+        h) usage ;;
+        :) die "Option -${OPTARG} requires an argument." ;;
+        *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
         esac
     done
     _require_iface
@@ -95,14 +95,14 @@ parse_cap_args() {
 parse_scan_args() {
     while getopts ":i:c:o:nVh" opt; do
         case $opt in
-            i) IFACE="$OPTARG" ;;
-            c) CHANNEL="$OPTARG" ;;
-            o) OUTDIR="$OPTARG" ;;
-            n) WAI_DRY_RUN=1 ;;
-            V) version ;;
-            h) usage ;;
-            :) die "Option -${OPTARG} requires an argument." ;;
-            *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
+        i) IFACE="$OPTARG" ;;
+        c) CHANNEL="$OPTARG" ;;
+        o) OUTDIR="$OPTARG" ;;
+        n) WAI_DRY_RUN=1 ;;
+        V) version ;;
+        h) usage ;;
+        :) die "Option -${OPTARG} requires an argument." ;;
+        *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
         esac
     done
     _require_iface
@@ -115,21 +115,21 @@ parse_mon_args() {
     MON_ACTION=""
     while getopts ":i:nVh" opt; do
         case $opt in
-            i) IFACE="$OPTARG" ;;
-            n) WAI_DRY_RUN=1 ;;
-            V) version ;;
-            h) usage ;;
-            :) die "Option -${OPTARG} requires an argument." ;;
-            *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
+        i) IFACE="$OPTARG" ;;
+        n) WAI_DRY_RUN=1 ;;
+        V) version ;;
+        h) usage ;;
+        :) die "Option -${OPTARG} requires an argument." ;;
+        *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
         esac
     done
-    shift $(( OPTIND - 1 ))
+    shift $((OPTIND - 1))
     MON_ACTION="${1:-}"
     _require_iface
     case "$MON_ACTION" in
-        on|off) ;;
-        "") die "Usage: wai mon -i <iface> on|off" ;;
-        *) die "Invalid action: '${MON_ACTION}'  (use 'on' or 'off')" ;;
+    on | off) ;;
+    "") die "Usage: wai mon -i <iface> on|off" ;;
+    *) die "Invalid action: '${MON_ACTION}'  (use 'on' or 'off')" ;;
     esac
     dbg "mon args: IFACE=${IFACE} ACTION=${MON_ACTION} DRY=${WAI_DRY_RUN}"
 }
@@ -138,15 +138,15 @@ parse_deth_args() {
     CLIENT_MAC=""
     while getopts ":i:t:c:o:nVh" opt; do
         case $opt in
-            i) IFACE="$OPTARG" ;;
-            t) TARGETS_RAW+=("$OPTARG") ;;
-            c) CLIENT_MAC="$OPTARG" ;;
-            o) OUTDIR="$OPTARG" ;;
-            n) WAI_DRY_RUN=1 ;;
-            V) version ;;
-            h) usage ;;
-            :) die "Option -${OPTARG} requires an argument." ;;
-            *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
+        i) IFACE="$OPTARG" ;;
+        t) TARGETS_RAW+=("$OPTARG") ;;
+        c) CLIENT_MAC="$OPTARG" ;;
+        o) OUTDIR="$OPTARG" ;;
+        n) WAI_DRY_RUN=1 ;;
+        V) version ;;
+        h) usage ;;
+        :) die "Option -${OPTARG} requires an argument." ;;
+        *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
         esac
     done
     _require_iface
@@ -172,15 +172,15 @@ parse_opt_args() {
     declare -g -a OPT_FILES=()
     while getopts ":o:nVh" opt; do
         case $opt in
-            o) OUTDIR="$OPTARG" ;;
-            n) WAI_DRY_RUN=1 ;;
-            V) version ;;
-            h) usage ;;
-            :) die "Option -${OPTARG} requires an argument." ;;
-            *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
+        o) OUTDIR="$OPTARG" ;;
+        n) WAI_DRY_RUN=1 ;;
+        V) version ;;
+        h) usage ;;
+        :) die "Option -${OPTARG} requires an argument." ;;
+        *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
         esac
     done
-    shift $(( OPTIND - 1 ))
+    shift $((OPTIND - 1))
     OPT_FILES=("$@")
     if [[ ${#OPT_FILES[@]} -eq 0 ]]; then
         die "Usage: wai opt [-o <dir>] <file.cap>..."

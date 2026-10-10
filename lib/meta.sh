@@ -3,9 +3,9 @@
 # Not executed directly. Loaded by the entrypoint.
 
 sanitize_name() {
-    echo "$1" | tr '[:upper:]' '[:lower:]' \
-        | tr -cs 'a-z0-9._-' '_' \
-        | sed 's/_\+/_/g; s/^_//; s/_$//'
+    echo "$1" | tr '[:upper:]' '[:lower:]' |
+        tr -cs 'a-z0-9._-' '_' |
+        sed 's/_\+/_/g; s/^_//; s/_$//'
 }
 
 init_meta() {
@@ -48,7 +48,7 @@ write_meta() {
         return 0
     fi
     mkdir -p "$META_DIR" 2>/dev/null || true
-    cat > "$META_FILE" <<EOF
+    cat >"$META_FILE" <<EOF
 # wai v${VER} -- metadata cache. Do not edit by hand.
 WAI_VERSION=${VER}
 TIMESTAMP=$(date '+%s')
@@ -61,7 +61,7 @@ OUTDIR=${OUTDIR}
 IWD_WAS_UP=${IWD_WAS_UP}
 IWD_NET=${IWD_NET}
 HOSTNAME=$(hostname 2>/dev/null || echo unknown)
-KERNEL=$(uname -r   2>/dev/null || echo unknown)
+KERNEL=$(uname -r 2>/dev/null || echo unknown)
 EOF
     chmod 600 "$META_FILE" 2>/dev/null || true
     ok "Metadata saved -> ${META_FILE}"
@@ -74,45 +74,61 @@ load_meta() {
     fi
 
     local ts bssid channel ssid_stored
-    ts=$(         grep '^TIMESTAMP=' "$META_FILE" | cut -d'=' -f2- | tr -d '[:space:]') \
-        || { rm -f "$META_FILE"; return 1; }
-    bssid=$(      grep '^BSSID='     "$META_FILE" | cut -d'=' -f2- | tr -d '[:space:]') \
-        || { rm -f "$META_FILE"; return 1; }
-    channel=$(    grep '^CHANNEL='   "$META_FILE" | cut -d'=' -f2- | tr -d '[:space:]') \
-        || { rm -f "$META_FILE"; return 1; }
-    ssid_stored=$(grep '^SSID='      "$META_FILE" | cut -d'=' -f2-) \
-        || { rm -f "$META_FILE"; return 1; }
+    ts=$(grep '^TIMESTAMP=' "$META_FILE" | cut -d'=' -f2- | tr -d '[:space:]') ||
+        {
+            rm -f "$META_FILE"
+            return 1
+        }
+    bssid=$(grep '^BSSID=' "$META_FILE" | cut -d'=' -f2- | tr -d '[:space:]') ||
+        {
+            rm -f "$META_FILE"
+            return 1
+        }
+    channel=$(grep '^CHANNEL=' "$META_FILE" | cut -d'=' -f2- | tr -d '[:space:]') ||
+        {
+            rm -f "$META_FILE"
+            return 1
+        }
+    ssid_stored=$(grep '^SSID=' "$META_FILE" | cut -d'=' -f2-) ||
+        {
+            rm -f "$META_FILE"
+            return 1
+        }
 
     # Validaciones de integridad
     if [[ -z "$ts" || -z "$bssid" || -z "$channel" ]]; then
         warn "Corrupt cache (empty fields) -- discarding."
-        rm -f "$META_FILE"; return 1
+        rm -f "$META_FILE"
+        return 1
     fi
-    if [[ ! "$ts"      =~ ^[0-9]+$ ]]; then
+    if [[ ! "$ts" =~ ^[0-9]+$ ]]; then
         warn "Corrupt cache (invalid timestamp) -- discarding."
-        rm -f "$META_FILE"; return 1
+        rm -f "$META_FILE"
+        return 1
     fi
-    if [[ ! "$bssid"   =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
+    if [[ ! "$bssid" =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
         warn "Corrupt cache (invalid BSSID) -- discarding."
-        rm -f "$META_FILE"; return 1
+        rm -f "$META_FILE"
+        return 1
     fi
     if [[ ! "$channel" =~ ^[0-9]+$ ]]; then
         warn "Corrupt cache (invalid channel) -- discarding."
-        rm -f "$META_FILE"; return 1
+        rm -f "$META_FILE"
+        return 1
     fi
 
     local now age mins secs
     now=$(date '+%s')
-    age=$(( now - ts ))
-    mins=$(( age / 60 ))
-    secs=$(( age % 60 ))
+    age=$((now - ts))
+    mins=$((age / 60))
+    secs=$((age % 60))
 
     TARGET="$bssid"
     CHANNEL="$channel"
     SSID_NAME="${ssid_stored}"
     update_meta_name
 
-    if (( age > META_MAX_AGE )); then
+    if ((age > META_MAX_AGE)); then
         warn "Cache for '${ssid_stored}' expired (${mins}m ${secs}s)."
         META_LOADED=2
     else

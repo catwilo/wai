@@ -24,7 +24,7 @@ _hs_tshark() {
     [[ -z "$HAS_TSHARK" || ! -f "$1" ]] && return 1
     local n
     n=$(tshark -r "$1" -Y "eapol" -T fields -e frame.number 2>/dev/null | wc -l) || return 1
-    (( n >= 2 ))
+    ((n >= 2))
 }
 
 # _hs_aircrack: verificación definitiva con aircrack-ng.
@@ -45,21 +45,21 @@ _check_handshake() {
     aircrack_out=$(aircrack-ng "$cap_file" 2>/dev/null || true)
     local frame_info
     frame_info=$(echo "$aircrack_out" | grep -oE '[0-9]+ handshake' | head -1) || true
-    [[ -n "$frame_info" ]] \
-        && hs_count=$(echo "$frame_info" | grep -oE '^[0-9]+') \
-        || hs_count=0
+    [[ -n "$frame_info" ]] &&
+        hs_count=$(echo "$frame_info" | grep -oE '^[0-9]+') ||
+        hs_count=0
 
     # tshark — frames EAPOL (handshake parcial también es crackeable)
     local eapol_count=0
-    [[ -n "$HAS_TSHARK" ]] \
-        && eapol_count=$(tshark -r "$cap_file" -Y "eapol" -T fields \
+    [[ -n "$HAS_TSHARK" ]] &&
+        eapol_count=$(tshark -r "$cap_file" -Y "eapol" -T fields \
             -e frame.number 2>/dev/null | wc -l) || true
 
-    if (( hs_count > 0 )); then
+    if ((hs_count > 0)); then
         ok "Handshake captured! (aircrack: ${hs_count} | EAPOL: ${eapol_count} frames)"
         return 0
     fi
-    if (( eapol_count >= 2 )); then
+    if ((eapol_count >= 2)); then
         ok "Partial handshake valid! (${eapol_count} EAPOL frames -- enough to crack)"
         return 0
     fi
@@ -90,13 +90,13 @@ _monitor_capture() {
         if _hs_tshark "$cap_file" 2>/dev/null; then
             if _hs_aircrack "$cap_file" 2>/dev/null; then
                 echo "" >&2
-                _check_handshake "$cap_file"   # log con conteos detallados
+                _check_handshake "$cap_file" # log con conteos detallados
                 return 0
             fi
         fi
 
         # Cada 3s: aircrack directo (aunque tshark no haya visto nada aún)
-        if (( elapsed > 0 && elapsed % 3 == 0 )); then
+        if ((elapsed > 0 && elapsed % 3 == 0)); then
             if _check_handshake "$cap_file" 2>/dev/null; then
                 echo "" >&2
                 return 0
@@ -104,14 +104,14 @@ _monitor_capture() {
         fi
 
         # Límite de seguridad: nunca bloquear indefinidamente
-        if (( elapsed >= CAP_MAX_SEC )); then
+        if ((elapsed >= CAP_MAX_SEC)); then
             echo "" >&2
             warn "Safety limit reached (${CAP_MAX_SEC}s) with no handshake in this attempt."
             return 1
         fi
 
         sleep 1
-        elapsed=$(( elapsed + 1 ))
+        elapsed=$((elapsed + 1))
     done
 }
 
@@ -132,7 +132,7 @@ capture_once() {
         clients_count=0
     fi
 
-    if (( clients_count > 0 )); then
+    if ((clients_count > 0)); then
         ok "${clients_count} client(s) detected -- parallel deauth to all + broadcast."
     else
         warn "0 clients detected -- broadcast deauth only."
@@ -143,7 +143,7 @@ capture_once() {
 
     # ── Loop de intentos ────────────────────────────────────────────────────────
     local attempt=1
-    while (( attempt <= MAX_TRIES_DEFAULT )); do
+    while ((attempt <= MAX_TRIES_DEFAULT)); do
         hdr "Attempt ${attempt}/${MAX_TRIES_DEFAULT} -- BSSID=${TARGET}  Channel=${CHANNEL}"
 
         rm -f "${base}"-*.cap 2>/dev/null || true
@@ -153,11 +153,11 @@ capture_once() {
         # ── PASO 1: airodump-ng PRIMERO ──────────────────────────────────────
         info "Starting capture (airodump-ng, channel ${CHANNEL})..."
         airodump-ng \
-            --bssid         "$TARGET"  \
-            --channel       "$CHANNEL" \
-            --output-format pcap       \
-            --write         "$base"    \
-            "$MON" > "$cap_log" 2>&1 &
+            --bssid "$TARGET" \
+            --channel "$CHANNEL" \
+            --output-format pcap \
+            --write "$base" \
+            "$MON" >"$cap_log" 2>&1 &
         local adump=$!
         dbg "airodump-ng PID: ${adump}"
 
@@ -165,8 +165,9 @@ capture_once() {
         sleep 2
         if ! kill -0 "$adump" 2>/dev/null; then
             warn "airodump-ng died at start (attempt ${attempt}). Log:"
-            while IFS= read -r l; do warn "  $l"; done < "$cap_log" || true
-            attempt=$(( attempt+1 )); continue
+            while IFS= read -r l; do warn "  $l"; done <"$cap_log" || true
+            attempt=$((attempt + 1))
+            continue
         fi
         ok "airodump-ng active (PID ${adump})."
 
@@ -178,19 +179,23 @@ capture_once() {
         # ── PASO 3: monitorear — salida inmediata al detectar handshake ──────
         local cf="${base}-01.cap"
         if _monitor_capture "$adump" "$deauth_pid" "$cf" "$clients_count"; then
-            kill "$deauth_pid" 2>/dev/null || true; wait "$deauth_pid" 2>/dev/null || true
-            kill "$adump"      2>/dev/null || true; wait "$adump"      2>/dev/null || true
+            kill "$deauth_pid" 2>/dev/null || true
+            wait "$deauth_pid" 2>/dev/null || true
+            kill "$adump" 2>/dev/null || true
+            wait "$adump" 2>/dev/null || true
             CAP_FILE="$cf"
             return 0
         fi
 
         # Tiempo agotado — limpiar procesos
-        kill "$deauth_pid" 2>/dev/null || true; wait "$deauth_pid" 2>/dev/null || true
-        kill "$adump"      2>/dev/null || true; wait "$adump"      2>/dev/null || true
+        kill "$deauth_pid" 2>/dev/null || true
+        wait "$deauth_pid" 2>/dev/null || true
+        kill "$adump" 2>/dev/null || true
+        wait "$adump" 2>/dev/null || true
         sleep 1
 
         dbg "Deauth log attempt ${attempt}:"
-        while IFS= read -r l; do dbg "  $l"; done < "$deauth_log" 2>/dev/null || true
+        while IFS= read -r l; do dbg "  $l"; done <"$deauth_log" 2>/dev/null || true
 
         # Final .cap review even if the monitor loop missed it in real time
         if [[ -f "$cf" ]] && _check_handshake "$cf"; then
@@ -199,8 +204,11 @@ capture_once() {
         fi
 
         warn "No handshake on attempt ${attempt}/${MAX_TRIES_DEFAULT}."
-        (( attempt < MAX_TRIES_DEFAULT )) && { info "Waiting 3s before next attempt..."; sleep 3; }
-        attempt=$(( attempt+1 ))
+        ((attempt < MAX_TRIES_DEFAULT)) && {
+            info "Waiting 3s before next attempt..."
+            sleep 3
+        }
+        attempt=$((attempt + 1))
     done
 
     return 1
@@ -216,10 +224,11 @@ capture() {
         return 0
     fi
 
-    if (( META_LOADED == 2 )); then
+    if ((META_LOADED == 2)); then
         warn "Stale cache failed -- rescanning to verify data..."
         local old_target="$TARGET" old_channel="$CHANNEL"
-        META_LOADED=0; rm -f "$META_FILE" 2>/dev/null || true
+        META_LOADED=0
+        rm -f "$META_FILE" 2>/dev/null || true
 
         run_scan
         local csv="${TMP}/scan-01.csv"
@@ -238,8 +247,8 @@ capture() {
                     for(i=1;i<=NF;i++) gsub(/^ +| +$/,"",$i)
                     if ($14==s && $6~/WPA/) { print $1"|"$4; exit }
                 }' "$csv") || true
-            new_bssid=$(cut -d'|' -f1 <<< "$row" 2>/dev/null) || true
-            new_channel=$(cut -d'|' -f2 <<< "$row" 2>/dev/null) || true
+            new_bssid=$(cut -d'|' -f1 <<<"$row" 2>/dev/null) || true
+            new_channel=$(cut -d'|' -f2 <<<"$row" 2>/dev/null) || true
         fi
 
         if [[ -z "$new_bssid" || -z "$new_channel" ]]; then
@@ -253,7 +262,8 @@ capture() {
 
         if [[ "$new_bssid" != "$old_target" || "$new_channel" != "$old_channel" ]]; then
             warn "Data updated: BSSID ${old_target} -> ${new_bssid}  Channel ${old_channel} -> ${new_channel}"
-            TARGET="$new_bssid"; CHANNEL="$new_channel"
+            TARGET="$new_bssid"
+            CHANNEL="$new_channel"
             write_meta
             if capture_once; then
                 write_meta
@@ -270,7 +280,7 @@ capture() {
             return 1
         fi
 
-    elif (( META_LOADED == 1 )); then
+    elif ((META_LOADED == 1)); then
         warn "No handshake. Fresh cache -- data correct."
         warn "  Causes: no active clients, weak signal, PMF enabled."
         _record_target_failure

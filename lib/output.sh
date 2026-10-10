@@ -26,7 +26,7 @@ _build_basename() {
     mac_dash=$(echo "$TARGET" | tr ':' '-' | tr '[:lower:]' '[:upper:]')
 
     local ssid_norm
-    ssid_norm=$(sanitize_name "${SSID_NAME}")   # de meta.sh
+    ssid_norm=$(sanitize_name "${SSID_NAME}") # de meta.sh
 
     if [[ -n "$ssid_norm" ]]; then
         echo "${ssid_norm}_${mac_dash}"
@@ -61,12 +61,12 @@ optimize() {
 
     # ── wpaclean: eliminar frames no relevantes ────────────────────────────────
     info "Cleaning capture with wpaclean..."
-    if wpaclean "$clean" "$CAP_FILE" > "${TMP}/wpaclean.log" 2>&1 && [[ -s "$clean" ]]; then
+    if wpaclean "$clean" "$CAP_FILE" >"${TMP}/wpaclean.log" 2>&1 && [[ -s "$clean" ]]; then
         ok "wpaclean OK ($(du -sh "$clean" | cut -f1))"
     else
         warn "wpaclean failed or produced empty output -- using raw .cap."
         dbg "Log wpaclean:"
-        while IFS= read -r l; do dbg "  wpaclean: $l"; done < "${TMP}/wpaclean.log" || true
+        while IFS= read -r l; do dbg "  wpaclean: $l"; done <"${TMP}/wpaclean.log" || true
         cp "$CAP_FILE" "$clean"
     fi
 
@@ -78,28 +78,28 @@ optimize() {
 
     # ── hcxpcapngtool → .22000 ────────────────────────────────────────────────
     if [[ -n "$HAS_HCXPCAPNGTOOL" ]]; then
-        if hcxpcapngtool -o "${base}.22000" "$clean" > "${TMP}/hcxpcap.log" 2>&1 \
-                && [[ -s "${base}.22000" ]]; then
+        if hcxpcapngtool -o "${base}.22000" "$clean" >"${TMP}/hcxpcap.log" 2>&1 &&
+            [[ -s "${base}.22000" ]]; then
             ok "-> ${base}.22000  (hashcat WPA2 modern -- optimal format)"
             best_format="22000"
         else
             warn "hcxpcapngtool available but conversion failed."
             dbg "Log hcxpcapngtool:"
             while IFS= read -r l; do dbg "  hcxpcapngtool: $l"; done \
-                < "${TMP}/hcxpcap.log" || true
+                <"${TMP}/hcxpcap.log" || true
         fi
     fi
 
     # ── cap2hccapx → .hccapx (fallback) ──────────────────────────────────────
     if [[ -z "$best_format" && -n "$HAS_CAP2HCCAPX" ]]; then
-        if cap2hccapx "$clean" "${base}.hccapx" > "${TMP}/cap2hccapx.log" 2>&1 \
-                && [[ -s "${base}.hccapx" ]]; then
+        if cap2hccapx "$clean" "${base}.hccapx" >"${TMP}/cap2hccapx.log" 2>&1 &&
+            [[ -s "${base}.hccapx" ]]; then
             ok "-> ${base}.hccapx  (hashcat legacy)"
             best_format="hccapx"
         else
             warn "cap2hccapx available but conversion failed."
             while IFS= read -r l; do dbg "  cap2hccapx: $l"; done \
-                < "${TMP}/cap2hccapx.log" || true
+                <"${TMP}/cap2hccapx.log" || true
         fi
     fi
 
@@ -112,7 +112,7 @@ optimize() {
         printf "# wai v%s  %s\n" "$VER" "$(date '+%Y-%m-%d %H:%M:%S')"
         printf "SSID=%s\nBSSID=%s\nChannel=%s\nIface=%s\nMonitor=%s\n" \
             "$SSID_NAME" "$TARGET" "$CHANNEL" "$IFACE" "$MON"
-    } > "${base}.info"
+    } >"${base}.info"
     ok "-> ${base}.info"
 
     # ── Registrar resultado en SESSION_RESULTS para el resumen final ──────────
@@ -132,9 +132,12 @@ optimize() {
             -e frame.number 2>/dev/null | wc -l) || true
     fi
 
-    if (( hs_count > 0 ));    then hs_status="completo"
-    elif (( eapol >= 2 ));    then hs_status="parcial"
-    else                           hs_status="sin_handshake"
+    if ((hs_count > 0)); then
+        hs_status="completo"
+    elif ((eapol >= 2)); then
+        hs_status="parcial"
+    else
+        hs_status="sin_handshake"
     fi
 
     # Format: "SSID|BSSID|Channel|status|hs_count|eapol|fname"
@@ -169,8 +172,8 @@ summary() {
 
     local idx=0
     for entry in "${SESSION_RESULTS[@]}"; do
-        idx=$(( idx + 1 ))
-        IFS='|' read -r s_ssid s_bssid s_ch s_status s_hs s_eapol s_fname <<< "$entry"
+        idx=$((idx + 1))
+        IFS='|' read -r s_ssid s_bssid s_ch s_status s_hs s_eapol s_fname <<<"$entry"
 
         echo -e "  ${B}── Target ${idx}/${total}${N}" >&2
         echo -e "    SSID    : ${C}${s_ssid}${N}" >&2
@@ -178,24 +181,24 @@ summary() {
         echo -e "    Channel : ${C}${s_ch}${N}" >&2
 
         case "$s_status" in
-            completo)
-                echo -e "    Status  : ${G}+  Handshake COMPLETE${N}  (aircrack: ${s_hs} | EAPOL: ${s_eapol} frames)" >&2
-                echo -e "    ${G}+  Ready for brute-force${N}" >&2
-                ok_count=$(( ok_count + 1 ))
-                ;;
-            parcial)
-                echo -e "    Status  : ${Y}!  PARTIAL handshake${N}  (EAPOL frames: ${s_eapol} -- may be enough)" >&2
-                partial_count=$(( partial_count + 1 ))
-                ;;
-            fallido)
-                echo -e "    Status  : ${R}x  No handshake captured${N}" >&2
-                echo -e "    ${Y}Possible causes: no active clients, weak signal, PMF/MFP enabled.${N}" >&2
-                fail_count=$(( fail_count + 1 ))
-                ;;
-            sin_handshake)
-                echo -e "    Status  : ${R}x  Files generated but no valid handshake${N}" >&2
-                fail_count=$(( fail_count + 1 ))
-                ;;
+        completo)
+            echo -e "    Status  : ${G}+  Handshake COMPLETE${N}  (aircrack: ${s_hs} | EAPOL: ${s_eapol} frames)" >&2
+            echo -e "    ${G}+  Ready for brute-force${N}" >&2
+            ok_count=$((ok_count + 1))
+            ;;
+        parcial)
+            echo -e "    Status  : ${Y}!  PARTIAL handshake${N}  (EAPOL frames: ${s_eapol} -- may be enough)" >&2
+            partial_count=$((partial_count + 1))
+            ;;
+        fallido)
+            echo -e "    Status  : ${R}x  No handshake captured${N}" >&2
+            echo -e "    ${Y}Possible causes: no active clients, weak signal, PMF/MFP enabled.${N}" >&2
+            fail_count=$((fail_count + 1))
+            ;;
+        sin_handshake)
+            echo -e "    Status  : ${R}x  Files generated but no valid handshake${N}" >&2
+            fail_count=$((fail_count + 1))
+            ;;
         esac
 
         # Files generated (when there is a real file name)
@@ -205,13 +208,14 @@ summary() {
             for ext in cap 22000 hccapx info; do
                 local f="${base}.${ext}"
                 if [[ -f "$f" && -s "$f" ]]; then
-                    local sz; sz=$(du -sh "$f" | cut -f1)
+                    local sz
+                    sz=$(du -sh "$f" | cut -f1)
                     local lbl=""
                     case "$ext" in
-                        cap)    lbl="pcap -- aircrack-ng / hashcat" ;;
-                        22000)  lbl="hashcat -m 22000  * RECOMMENDED" ;;
-                        hccapx) lbl="hashcat -m 2500" ;;
-                        info)   lbl="metadata" ;;
+                    cap) lbl="pcap -- aircrack-ng / hashcat" ;;
+                    22000) lbl="hashcat -m 22000  * RECOMMENDED" ;;
+                    hccapx) lbl="hashcat -m 2500" ;;
+                    info) lbl="metadata" ;;
                     esac
                     echo -e "      ${G}+${N}  ${s_fname}.${ext}  (${sz})  -- ${lbl}" >&2
                 fi
@@ -219,7 +223,7 @@ summary() {
 
             # Comandos de uso
             echo -e "    ${B}Usage${N}:" >&2
-            [[ -f "${base}.22000"  ]] && echo -e "      ${C}hashcat -m 22000 ${base}.22000 wordlist.txt${N}" >&2
+            [[ -f "${base}.22000" ]] && echo -e "      ${C}hashcat -m 22000 ${base}.22000 wordlist.txt${N}" >&2
             [[ -f "${base}.hccapx" ]] && echo -e "      ${C}hashcat -m 2500  ${base}.hccapx wordlist.txt${N}" >&2
             echo -e "      ${C}aircrack-ng -w wordlist.txt ${base}.cap${N}" >&2
         fi

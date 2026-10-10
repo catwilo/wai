@@ -13,11 +13,14 @@ B='\033[1m'
 N='\033[0m'
 DIM='\033[2m'
 
-ts()   { date '+%H:%M:%S'; }
+ts() { date '+%H:%M:%S'; }
 info() { echo -e "${C}[.]${N} $(ts) $*" >&2; }
-ok()   { echo -e "${G}[+]${N} $(ts) $*" >&2; }
+ok() { echo -e "${G}[+]${N} $(ts) $*" >&2; }
 warn() { echo -e "${Y}[!]${N} $(ts) $*" >&2; }
-hdr()  { echo -e "\n${B}${C}-- $* --${N}" >&2; }
-sep()  { echo -e "${DIM}$(printf -- '-%.0s' {1..76})${N}" >&2; }
-die()  { echo -e "\n${R}[x] $(ts) $*${N}" >&2; exit 1; }
-dbg()  { echo -e "${DIM}    [dbg] $(ts) $*${N}" >&2; }
+hdr() { echo -e "\n${B}${C}-- $* --${N}" >&2; }
+sep() { echo -e "${DIM}$(printf -- '-%.0s' {1..76})${N}" >&2; }
+die() {
+    echo -e "\n${R}[x] $(ts) $*${N}" >&2
+    exit 1
+}
+dbg() { echo -e "${DIM}    [dbg] $(ts) $*${N}" >&2; }

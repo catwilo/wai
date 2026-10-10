@@ -25,14 +25,20 @@ BATS="${BATS:-$(command -v bats 2>/dev/null || true)}"
 shopt -s nullglob
 FILES=("$TESTS_DIR"/*.bats)
 shopt -u nullglob
-[ "${#FILES[@]}" -gt 0 ] || { printf '[WARN] no .bats files in %s\n' "$TESTS_DIR" >&2; exit 0; }
+[ "${#FILES[@]}" -gt 0 ] || {
+    printf '[WARN] no .bats files in %s\n' "$TESTS_DIR" >&2
+    exit 0
+}
 
 TOTAL=0
 for f in "${FILES[@]}"; do
     n="$("$BATS" --count "$f" 2>/dev/null || echo 0)"
     TOTAL=$((TOTAL + n))
 done
-[ "$TOTAL" -gt 0 ] || { printf '[WARN] bats counted 0 tests\n' >&2; exit 0; }
+[ "$TOTAL" -gt 0 ] || {
+    printf '[WARN] bats counted 0 tests\n' >&2
+    exit 0
+}
 
 printf '[INFO] running %d test(s) across %d file(s)\n' "$TOTAL" "${#FILES[@]}"
 
@@ -43,21 +49,23 @@ for f in "${FILES[@]}"; do
     fname="$(basename "$f")"
     while IFS= read -r line; do
         case "$line" in
-            ok\ *)
-                IDX=$((IDX + 1))
-                title="${line#ok *}"; title="${title#* }"
-                printf '[%3d/%d] %sPASS%s %s :: %s\n' "$IDX" "$TOTAL" "$GREEN" "$RESET" "$fname" "$title"
-                PASS=$((PASS + 1))
-                ;;
-            not\ ok\ *)
-                IDX=$((IDX + 1))
-                title="${line#not ok *}"; title="${title#* }"
-                printf '[%3d/%d] %sFAIL%s %s :: %s\n' "$IDX" "$TOTAL" "$RED" "$RESET" "$fname" "$title"
-                FAIL=$((FAIL + 1))
-                ;;
-            '# '\ *)
-                printf '           %s%s%s\n' "$DIM" "${line#\# }" "$RESET"
-                ;;
+        ok\ *)
+            IDX=$((IDX + 1))
+            title="${line#ok *}"
+            title="${title#* }"
+            printf '[%3d/%d] %sPASS%s %s :: %s\n' "$IDX" "$TOTAL" "$GREEN" "$RESET" "$fname" "$title"
+            PASS=$((PASS + 1))
+            ;;
+        not\ ok\ *)
+            IDX=$((IDX + 1))
+            title="${line#not ok *}"
+            title="${title#* }"
+            printf '[%3d/%d] %sFAIL%s %s :: %s\n' "$IDX" "$TOTAL" "$RED" "$RESET" "$fname" "$title"
+            FAIL=$((FAIL + 1))
+            ;;
+        '# '\ *)
+            printf '           %s%s%s\n' "$DIM" "${line#\# }" "$RESET"
+            ;;
         esac
     done < <("$BATS" --tap "$f" 2>&1)
 done

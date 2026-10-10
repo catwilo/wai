@@ -32,14 +32,14 @@ main() {
     shift || true
 
     case "$sub" in
-        cap)   cmd_cap "$@" ;;
-        scan)  cmd_scan "$@" ;;
-        mon)   cmd_mon "$@" ;;
-        deth)  cmd_deth "$@" ;;
-        opt)   cmd_opt "$@" ;;
-        -V|--version|version) version ;;
-        -h|--help|help|"") usage ;;
-        *)     die "Unknown subcommand: '${sub}'  (use -h for help)" ;;
+    cap) cmd_cap "$@" ;;
+    scan) cmd_scan "$@" ;;
+    mon) cmd_mon "$@" ;;
+    deth) cmd_deth "$@" ;;
+    opt) cmd_opt "$@" ;;
+    -V | --version | version) version ;;
+    -h | --help | help | "") usage ;;
+    *) die "Unknown subcommand: '${sub}'  (use -h for help)" ;;
     esac
 }
 
@@ -58,7 +58,7 @@ cmd_cap() {
 
     local target_idx=0
     for raw_target in "${TARGETS_RAW[@]}"; do
-        target_idx=$(( target_idx + 1 ))
+        target_idx=$((target_idx + 1))
         echo -e "\n${B}${C}==============================================================${N}" >&2
         echo -e "${B}${C}  TARGET ${target_idx}/${total_targets}: ${raw_target}${N}" >&2
         echo -e "${B}${C}==============================================================${N}\n" >&2
@@ -69,8 +69,8 @@ cmd_cap() {
         hdr "Network cache"
         init_meta
         if load_meta; then
-            if (( META_LOADED == 1 )); then
-                ok  "Fresh data - scan skipped."
+            if ((META_LOADED == 1)); then
+                ok "Fresh data - scan skipped."
             else
                 warn "Stale cache - will re-verify on failure."
             fi
@@ -106,28 +106,28 @@ cmd_mon() {
     parse_mon_args "$@"
     banner "mon"
     case "$MON_ACTION" in
-        on)
-            preflight root
-            install_trap
-            save_and_stop_iwd
-            monitor_up
-            ok "Monitor mode active: ${MON}"
-            info "Run 'wai mon off' or Ctrl+C to restore the system."
-            info "Exiting without disabling - the interface stays in monitor mode."
-            trap - EXIT INT TERM
-            ;;
-        off)
-            preflight root
-            install_trap
-            if [[ -f "$WAI_STATE_FILE" ]]; then
-                # shellcheck disable=SC1090
-                source "$WAI_STATE_FILE" 2>/dev/null || true
-                IWD_WAS_UP="${IWD_STATE_WAS_UP:-0}"
-                IWD_NET="${IWD_STATE_NET:-}"
-                IFACE="${IFACE:-${IWD_STATE_IFACE:-}}"
-            fi
-            monitor_down
-            ;;
+    on)
+        preflight root
+        install_trap
+        save_and_stop_iwd
+        monitor_up
+        ok "Monitor mode active: ${MON}"
+        info "Run 'wai mon off' or Ctrl+C to restore the system."
+        info "Exiting without disabling - the interface stays in monitor mode."
+        trap - EXIT INT TERM
+        ;;
+    off)
+        preflight root
+        install_trap
+        if [[ -f "$WAI_STATE_FILE" ]]; then
+            # shellcheck disable=SC1090
+            source "$WAI_STATE_FILE" 2>/dev/null || true
+            IWD_WAS_UP="${IWD_STATE_WAS_UP:-0}"
+            IWD_NET="${IWD_STATE_NET:-}"
+            IFACE="${IFACE:-${IWD_STATE_IFACE:-}}"
+        fi
+        monitor_down
+        ;;
     esac
 }
 
@@ -171,12 +171,12 @@ cmd_deth() {
             --deauth "$DEAUTH_N" \
             -a "$TARGET" \
             -c "$CLIENT_MAC" \
-            "$MON" > "$log" 2>&1; then
+            "$MON" >"$log" 2>&1; then
             ok "Deauth sent."
         else
             warn "aireplay-ng failed. Log:"
         fi
-        while IFS= read -r l; do dbg "  $l"; done < "$log" || true
+        while IFS= read -r l; do dbg "  $l"; done <"$log" || true
     fi
 }
 

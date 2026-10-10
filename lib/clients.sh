@@ -27,18 +27,19 @@ _scan_clients_fixed() {
     # CRÍTICO: --bssid + --channel fijos evita que airodump salte canales.
     # Without this, the AP's clients appear sporadically or not at all.
     airodump-ng \
-        --bssid          "$TARGET"   \
-        --channel        "$CHANNEL"  \
-        --output-format  csv         \
-        --write          "${TMP}/clients" \
-        "$MON" > "${TMP}/clients_scan.log" 2>&1 &
+        --bssid "$TARGET" \
+        --channel "$CHANNEL" \
+        --output-format csv \
+        --write "${TMP}/clients" \
+        "$MON" >"${TMP}/clients_scan.log" 2>&1 &
     local p=$!
     dbg "  airodump-ng clients PID: ${p}"
 
     local i=0
-    while kill -0 "$p" 2>/dev/null && (( i < SCAN_CLIENT_SEC )); do
-        printf "\r  ${C}Looking for clients... %2ds${N}" "$(( SCAN_CLIENT_SEC - i ))" >&2
-        sleep 1; i=$(( i+1 ))
+    while kill -0 "$p" 2>/dev/null && ((i < SCAN_CLIENT_SEC)); do
+        printf "\r  ${C}Looking for clients... %2ds${N}" "$((SCAN_CLIENT_SEC - i))" >&2
+        sleep 1
+        i=$((i + 1))
     done
     printf "\r  %sClient scan complete.             %s\n" "$C" "$N" >&2
 
@@ -47,7 +48,7 @@ _scan_clients_fixed() {
 
     if [[ ! -f "$_CLIENTS_CSV" ]]; then
         warn "No client CSV generated. airodump log:"
-        while IFS= read -r l; do warn "  $l"; done < "${TMP}/clients_scan.log" 2>/dev/null || true
+        while IFS= read -r l; do warn "  $l"; done <"${TMP}/clients_scan.log" 2>/dev/null || true
     fi
 }
 

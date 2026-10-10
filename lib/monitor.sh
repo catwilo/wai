@@ -39,11 +39,11 @@ monitor_up() {
     sleep 1
 
     info "airmon-ng check kill (auto-answer to prompts)..."
-    echo "y" | airmon-ng check kill 2>&1 \
-        | while IFS= read -r l; do dbg "  $l"; done || true
+    echo "y" | airmon-ng check kill 2>&1 |
+        while IFS= read -r l; do dbg "  $l"; done || true
     sleep 1
 
-    pkill -9 iwd    2>/dev/null || true
+    pkill -9 iwd 2>/dev/null || true
     pkill -9 dhcpcd 2>/dev/null || true
     sleep 1
 
@@ -52,14 +52,14 @@ monitor_up() {
     airmon_out=$(echo "y" | airmon-ng start "$IFACE" 2>&1) || true
     echo "$airmon_out" | while IFS= read -r l; do dbg "  airmon: $l"; done
 
-    MON=$(echo "$airmon_out" \
-        | sed -n 's/.*\]\(wlan[0-9]*mon\).*/\1/p' \
-        | head -1)
+    MON=$(echo "$airmon_out" |
+        sed -n 's/.*\]\(wlan[0-9]*mon\).*/\1/p' |
+        head -1)
 
     if [[ -z "$MON" ]]; then
-        MON=$(iw dev 2>/dev/null \
-            | awk '/Interface/{i=$2} /type monitor/{print i}' \
-            | head -1)
+        MON=$(iw dev 2>/dev/null |
+            awk '/Interface/{i=$2} /type monitor/{print i}' |
+            head -1)
         if [[ -n "$MON" ]]; then
             dbg "Monitor interface from fallback (iw dev): '${MON}'"
         else
@@ -69,13 +69,13 @@ monitor_up() {
         dbg "Monitor interface from airmon output: '${MON}'"
     fi
 
-    ip link set "$MON" up 2>/dev/null \
-        && dbg "${MON} set up with 'ip link set up'." || true
+    ip link set "$MON" up 2>/dev/null &&
+        dbg "${MON} set up with 'ip link set up'." || true
     sleep 1
 
     dbg "Final state of ${MON}:"
-    iw dev "$MON" info 2>/dev/null \
-        | while IFS= read -r l; do dbg "  $l"; done || true
+    iw dev "$MON" info 2>/dev/null |
+        while IFS= read -r l; do dbg "  $l"; done || true
 
     ok "Monitor interface active: ${MON}"
 }
@@ -95,16 +95,16 @@ monitor_down() {
 
     local candidate="${MON}"
     if [[ -z "$candidate" ]]; then
-        candidate=$(iw dev 2>/dev/null \
-            | awk '/Interface/{i=$2} /type monitor/{print i}' \
-            | head -1)
+        candidate=$(iw dev 2>/dev/null |
+            awk '/Interface/{i=$2} /type monitor/{print i}' |
+            head -1)
         if [[ -z "$candidate" ]]; then
             candidate="${IFACE}mon"
         fi
     fi
 
-    airmon-ng stop "$candidate" 2>&1 \
-        | while IFS= read -r l; do dbg "  $l"; done || true
+    airmon-ng stop "$candidate" 2>&1 |
+        while IFS= read -r l; do dbg "  $l"; done || true
     MON=""
     ok "Monitor mode disabled."
 }

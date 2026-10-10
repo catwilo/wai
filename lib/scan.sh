@@ -15,14 +15,15 @@ run_scan() {
     airodump-ng \
         --output-format csv \
         --write "${TMP}/scan" \
-        "$MON" > "${TMP}/scan.log" 2>&1 &
+        "$MON" >"${TMP}/scan.log" 2>&1 &
     local scan_pid=$!
     dbg "airodump-ng escaneo PID: ${scan_pid}"
 
     local i=0
-    while kill -0 "$scan_pid" 2>/dev/null && (( i < duration )); do
-        printf "\r  ${C}Scanning... %2ds${N}" "$(( duration - i ))" >&2
-        sleep 1; i=$(( i+1 ))
+    while kill -0 "$scan_pid" 2>/dev/null && ((i < duration)); do
+        printf "\r  ${C}Scanning... %2ds${N}" "$((duration - i))" >&2
+        sleep 1
+        i=$((i + 1))
     done
     printf "\r  %sScan finished.            %s\n" "$C" "$N" >&2
 
@@ -31,7 +32,7 @@ run_scan() {
 
     if [[ ! -f "${TMP}/scan-01.csv" ]]; then
         warn "airodump-ng log (scan):"
-        while IFS= read -r l; do warn "  $l"; done < "${TMP}/scan.log" 2>/dev/null || true
+        while IFS= read -r l; do warn "  $l"; done <"${TMP}/scan.log" 2>/dev/null || true
         die "No CSV after scan. Is ${MON} in monitor mode and UP?"
     fi
 
@@ -41,7 +42,7 @@ run_scan() {
 
     if [[ "$ap_count" -eq 0 ]]; then
         warn "Empty CSV. airodump-ng log:"
-        while IFS= read -r l; do warn "  $l"; done < "${TMP}/scan.log" 2>/dev/null || true
+        while IFS= read -r l; do warn "  $l"; done <"${TMP}/scan.log" 2>/dev/null || true
         die "Scan produced no results. Is the interface in monitor mode?"
     fi
 }
@@ -76,10 +77,10 @@ resolve_target() {
     dbg "TARGET='${TARGET}'  is_bssid=${is_bssid}  META_LOADED=${META_LOADED}  CHANNEL='${CHANNEL}'"
 
     # Valid cache -- no scan needed
-    if (( META_LOADED >= 1 )) && [[ -n "$CHANNEL" ]]; then
+    if ((META_LOADED >= 1)) && [[ -n "$CHANNEL" ]]; then
         TARGET="${TARGET^^}"
         local src="fresh cache"
-        if (( META_LOADED == 2 )); then
+        if ((META_LOADED == 2)); then
             src="stale cache"
         fi
         ok "BSSID=${TARGET}  Channel=${CHANNEL}  SSID='${SSID_NAME}'  (${src})"
@@ -87,20 +88,22 @@ resolve_target() {
     fi
 
     # BSSID and channel given directly as arguments
-    if (( is_bssid )) && [[ -n "$CHANNEL" ]]; then
+    if ((is_bssid)) && [[ -n "$CHANNEL" ]]; then
         TARGET="${TARGET^^}"
         if [[ -z "$SSID_NAME" ]]; then
             SSID_NAME="$TARGET"
         fi
         ok "BSSID=${TARGET}  Channel=${CHANNEL}  (direct args)"
-        update_meta_name; write_meta; return 0
+        update_meta_name
+        write_meta
+        return 0
     fi
 
     # Scan needed
     run_scan
     local csv="${TMP}/scan-01.csv"
 
-    if (( is_bssid )); then
+    if ((is_bssid)); then
         # Find channel by BSSID
         CHANNEL=$(awk -F',' -v b="${TARGET^^}" '
             /^[0-9A-Fa-f]{2}:/ {
@@ -140,8 +143,8 @@ resolve_target() {
         fi
 
         SSID_NAME="$TARGET"
-        TARGET=$(cut -d'|' -f1 <<< "$row")
-        CHANNEL=${CHANNEL:-$(cut -d'|' -f2 <<< "$row")}
+        TARGET=$(cut -d'|' -f1 <<<"$row")
+        CHANNEL=${CHANNEL:-$(cut -d'|' -f2 <<<"$row")}
         dbg "Resolved: BSSID=${TARGET}  CHANNEL=${CHANNEL}"
     fi
 

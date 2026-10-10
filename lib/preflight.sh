@@ -41,8 +41,8 @@ preflight() {
                 miss+=("$dep")
             fi
         done
-        (( ${#miss[@]} > 0 )) \
-            && die "Missing dependencies: ${miss[*]}\n  -> sudo apt install aircrack-ng iwd"
+        ((${#miss[@]} > 0)) &&
+            die "Missing dependencies: ${miss[*]}\n  -> sudo apt install aircrack-ng iwd"
         ok "Required dependencies: OK"
     else
         dbg "Dependencies: skipped (dry-run)."
@@ -52,17 +52,19 @@ preflight() {
         if command -v "$opt" &>/dev/null; then
             dbg "  optional OK: $opt -> $(command -v "$opt")"
             case "$opt" in
-                hcxpcapngtool) HAS_HCXPCAPNGTOOL=1 ;;
-                cap2hccapx)    HAS_CAP2HCCAPX=1    ;;
-                tshark)        HAS_TSHARK=1         ;;
+            hcxpcapngtool) HAS_HCXPCAPNGTOOL=1 ;;
+            cap2hccapx) HAS_CAP2HCCAPX=1 ;;
+            tshark) HAS_TSHARK=1 ;;
             esac
         else
             dbg "  optional missing: $opt"
             case "$opt" in
-                hcxpcapngtool|cap2hccapx)
-                    warn "Optional tool missing: $opt  (install: sudo apt install hcxtools)" ;;
-                tshark)
-                    warn "Optional tool missing: tshark  (install: sudo apt install tshark)" ;;
+            hcxpcapngtool | cap2hccapx)
+                warn "Optional tool missing: $opt  (install: sudo apt install hcxtools)"
+                ;;
+            tshark)
+                warn "Optional tool missing: tshark  (install: sudo apt install tshark)"
+                ;;
             esac
         fi
     done

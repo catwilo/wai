@@ -16,7 +16,7 @@ cleanup() {
         rm -f "$WAI_STATE_FILE" 2>/dev/null || true
         rm -rf "$TMP"
         if [[ $rc -eq 0 ]]; then
-            ok  "Finished OK (rc=0)."
+            ok "Finished OK (rc=0)."
         else
             warn "Finished with errors (rc=${rc})."
         fi
@@ -28,8 +28,8 @@ cleanup() {
 
     if [[ -n "$MON" ]]; then
         dbg "Stopping monitor: $MON"
-        airmon-ng stop "$MON" 2>&1 \
-            | while IFS= read -r l; do dbg "  $l"; done || true
+        airmon-ng stop "$MON" 2>&1 |
+            while IFS= read -r l; do dbg "  $l"; done || true
     fi
 
     # Cross-process iwd state: if this process did not stop iwd itself,
@@ -47,15 +47,16 @@ cleanup() {
         info "Restoring iwd..."
         systemctl unmask iwd 2>/dev/null || true
         systemctl enable iwd 2>/dev/null || true
-        systemctl start  iwd 2>/dev/null || true
+        systemctl start iwd 2>/dev/null || true
         sleep 3
 
         if [[ -n "$iwd_net" ]]; then
             info "Reconnecting to '${iwd_net}'..."
             local w=0
-            until iwctl station "$IFACE" show &>/dev/null || (( w >= 15 )); do
+            until iwctl station "$IFACE" show &>/dev/null || ((w >= 15)); do
                 printf "\r  Waiting for iwd... %ds" "$w" >&2
-                sleep 1; w=$(( w+1 ))
+                sleep 1
+                w=$((w + 1))
             done
             echo "" >&2
             iwctl station "$IFACE" connect "$iwd_net" 2>/dev/null || true
@@ -73,7 +74,7 @@ cleanup() {
     rm -f "$WAI_STATE_FILE" 2>/dev/null || true
     rm -rf "$TMP"
     if [[ $rc -eq 0 ]]; then
-        ok  "Finished OK (rc=0)."
+        ok "Finished OK (rc=0)."
     else
         warn "Finished with errors (rc=${rc})."
     fi
