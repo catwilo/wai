@@ -9,7 +9,7 @@ fi
 
 set -Eeuo pipefail
 
-WAI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WAI_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 LIB_DIR="${WAI_DIR}/lib"
 
 source "${LIB_DIR}/constants.sh"
