@@ -24,7 +24,7 @@ run_scan() {
         printf "\r  ${C}Scanning... %2ds${N}" "$(( duration - i ))" >&2
         sleep 1; i=$(( i+1 ))
     done
-    printf "\r  ${C}Scan finished.            ${N}\n" >&2
+    printf "\r  %sScan finished.            %s\n" "$C" "$N" >&2
 
     kill "$scan_pid" 2>/dev/null || true
     wait "$scan_pid" 2>/dev/null || true

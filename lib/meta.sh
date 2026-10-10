@@ -34,7 +34,8 @@ update_meta_name() {
     if [[ -z "$SSID_NAME" ]]; then
         return 0
     fi
-    local new="${META_DIR}/$(sanitize_name "$SSID_NAME").meta"
+    local new
+    new="${META_DIR}/$(sanitize_name "$SSID_NAME").meta"
     if [[ "$new" != "$META_FILE" && -f "$META_FILE" ]]; then
         mv -f "$META_FILE" "$new" 2>/dev/null || true
         dbg "META_FILE renamed -> ${new}"

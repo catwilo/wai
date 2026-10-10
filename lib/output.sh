@@ -120,16 +120,17 @@ optimize() {
     local hs_count=0 eapol=0
     local ac_out
     ac_out=$(aircrack-ng "${base}.cap" 2>/dev/null || true)
-    local fi
-    fi=$(echo "$ac_out" | grep -oE '[0-9]+ handshake' | head -1) || true
-    if [[ -n "$fi" ]]; then
-        hs_count=$(echo "$fi" | grep -oE '^[0-9]+')
+    local fi_info
+    fi_info=$(echo "$ac_out" | grep -oE '[0-9]+ handshake' | head -1) || true
+    if [[ -n "$fi_info" ]]; then
+        hs_count=$(echo "$fi_info" | grep -oE '^[0-9]+')
     else
         hs_count=0
     fi
-    [[ -n "$HAS_TSHARK" ]] \
-        && eapol=$(tshark -r "${base}.cap" -Y "eapol" -T fields \
+    if [[ -n "$HAS_TSHARK" ]]; then
+        eapol=$(tshark -r "${base}.cap" -Y "eapol" -T fields \
             -e frame.number 2>/dev/null | wc -l) || true
+    fi
 
     if (( hs_count > 0 ));    then hs_status="completo"
     elif (( eapol >= 2 ));    then hs_status="parcial"

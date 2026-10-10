@@ -15,9 +15,11 @@ cleanup() {
         dbg "[dry-run] cleanup: nothing to do"
         rm -f "$WAI_STATE_FILE" 2>/dev/null || true
         rm -rf "$TMP"
-        [[ $rc -eq 0 ]] \
-            && ok  "Finished OK (rc=0)." \
-            || warn "Finished with errors (rc=${rc})."
+        if [[ $rc -eq 0 ]]; then
+            ok  "Finished OK (rc=0)."
+        else
+            warn "Finished with errors (rc=${rc})."
+        fi
         return
     fi
 
@@ -70,9 +72,11 @@ cleanup() {
 
     rm -f "$WAI_STATE_FILE" 2>/dev/null || true
     rm -rf "$TMP"
-    [[ $rc -eq 0 ]] \
-        && ok  "Finished OK (rc=0)." \
-        || warn "Finished with errors (rc=${rc})."
+    if [[ $rc -eq 0 ]]; then
+        ok  "Finished OK (rc=0)."
+    else
+        warn "Finished with errors (rc=${rc})."
+    fi
 }
 
 install_trap() {

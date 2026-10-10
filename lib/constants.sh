@@ -34,7 +34,8 @@ WAI_DRY_RUN="${WAI_DRY_RUN:-0}"
 readonly WAI_STATE_FILE="${TMPDIR:-/tmp}/wai.state"
 
 # Per-process temp directory. Cleaned by cleanup().
-readonly TMP=$(mktemp -d "${TMPDIR:-/tmp}/wai.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/wai.XXXXXX")
+readonly TMP
 
 # _sys: run a command unless WAI_DRY_RUN=1, in which case print it.
 _sys() {

@@ -40,7 +40,7 @@ _scan_clients_fixed() {
         printf "\r  ${C}Looking for clients... %2ds${N}" "$(( SCAN_CLIENT_SEC - i ))" >&2
         sleep 1; i=$(( i+1 ))
     done
-    printf "\r  ${C}Client scan complete.             ${N}\n" >&2
+    printf "\r  %sClient scan complete.             %s\n" "$C" "$N" >&2
 
     kill "$p" 2>/dev/null || true
     wait "$p" 2>/dev/null || true
