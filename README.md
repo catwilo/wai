@@ -90,7 +90,30 @@ Opcionales (mejoran la salida):
         |-- clients.sh       # deteccion de clientes del AP
         |-- deauth.sh        # deauth dirigido + broadcast
         |-- capture.sh       # captura del handshake y verificacion
-        `-- output.sh        # wpaclean, conversion y resumen
+        |-- output.sh        # wpaclean, conversion y resumen
+    `-- tests/               # suite BATS -- bash tests/run.sh
+        |-- helpers.bash     # setup aislado por test (HOME/XDG/TMPDIR)
+        |-- cli.bats         # dispatch: -V, -h, subcomando desconocido
+        |-- args.bats        # validacion de formato por subcomando
+        |-- dryrun.bats      # flujo completo con -n
+        `-- run.sh           # runner: una linea por test
+
+## Tests
+
+    bash tests/run.sh
+
+Corre la suite BATS. Una linea por test con `[N/total] PASS|FAIL`,
+nombre del archivo y titulo. Un paste del output es completo y
+ordenado. Cero dependencia de hardware: todo lo que la suite ejercita
+corre sin root y sin interfaz Wi-Fi.
+
+Cobertura actual:
+
+    cli.bats      dispatch: -V, --help, subcomando desconocido.
+    args.bats     validacion de formato por subcomando (BSSID, MAC,
+                  canal, faltantes).
+    dryrun.bats   flujo completo con -n: scan, cap (-t multiple),
+                  deth, y limpieza de WAI_STATE_FILE.
 
 ## Licencia
 

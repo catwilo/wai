@@ -177,9 +177,23 @@ actualice el comando instalado automaticamente. Copiar obliga a
 reinstalar en cada cambio y crea drift entre el binario instalado y el
 source.
 
-### Por que no hay tests todavia
+### Por que hay tests ahora
 
-Los subcomandos de red requieren hardware Wi-Fi en modo monitor y root.
-Los tests unitarios que valdria la pena cubririan `args.sh` (validacion
-de formato) y `meta.sh` (sanitizacion de nombres); se anaden cuando sus
-firmas se estabilicen.
+Los subcomandos de red requieren hardware Wi-Fi en modo monitor y
+root, pero tres capas se ejercitan sin tocar la red:
+
+    tests/cli.bats      dispatch, -V, -h, subcomando invalido.
+    tests/args.bats     validacion de formato por subcomando
+                        (BSSID, MAC, canal, faltantes, opciones
+                        desconocidas). Corren antes de preflight.
+    tests/dryrun.bats   flujo completo con -n: scan, cap (multiple
+                        -t), deth; verifica que no deja WAI_STATE_FILE
+                        y que el launcher resuelve el symlink.
+
+`bash tests/run.sh` imprime una linea por test con [N/total], el
+archivo y el titulo. Sin \r, sin contadores in-place: un paste del
+output es completo. Los fallos imprimen detalle indentado debajo.
+
+Los subcomandos que tocan hardware real (mon on/off, captura real)
+siguen verificandose en un host con root, interfaz Wi-Fi y red
+autorizada; no son cubiertos por tests unitarios.
