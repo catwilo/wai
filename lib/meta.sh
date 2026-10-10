@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# lib/meta.sh — Caché de metadatos de redes escaneadas
-# No ejecutar directamente. Cargado por wlab.sh
+# lib/meta.sh -- Metadata cache of scanned networks.
+# Not executed directly. Loaded by the entrypoint.
 
 sanitize_name() {
     echo "$1" | tr '[:upper:]' '[:lower:]' \
@@ -9,33 +9,47 @@ sanitize_name() {
 }
 
 init_meta() {
+    # One-time migration from the legacy path (~/wssids) to the XDG
+    # location. Silent when there is nothing to migrate; moves the
+    # whole directory once and leaves no trace behind.
+    if [[ ! -d "$META_DIR" && -d "$LEGACY_META_DIR" ]]; then
+        mkdir -p "$(dirname "$META_DIR")" 2>/dev/null || true
+        if mv "$LEGACY_META_DIR" "$META_DIR" 2>/dev/null; then
+            dbg "Migrated ${LEGACY_META_DIR} -> ${META_DIR}"
+        fi
+    fi
+
     if [[ ! -d "$META_DIR" ]]; then
-        mkdir -p "$META_DIR" || die "No se pudo crear META_DIR: ${META_DIR}"
+        mkdir -p "$META_DIR" || die "Could not create META_DIR: ${META_DIR}"
         chmod 700 "$META_DIR" 2>/dev/null || true
-        ok "Directorio de metadatos creado: ${META_DIR}"
+        ok "Metadata directory created: ${META_DIR}"
     else
-        dbg "META_DIR existe: ${META_DIR}"
+        dbg "META_DIR exists: ${META_DIR}"
     fi
     META_FILE="${META_DIR}/$(sanitize_name "$TARGET").meta"
-    dbg "META_FILE provisional: ${META_FILE}"
+    dbg "Provisional META_FILE: ${META_FILE}"
 }
 
 update_meta_name() {
-    [[ -z "$SSID_NAME" ]] && return 0
+    if [[ -z "$SSID_NAME" ]]; then
+        return 0
+    fi
     local new="${META_DIR}/$(sanitize_name "$SSID_NAME").meta"
     if [[ "$new" != "$META_FILE" && -f "$META_FILE" ]]; then
         mv -f "$META_FILE" "$new" 2>/dev/null || true
-        dbg "META_FILE renombrado → ${new}"
+        dbg "META_FILE renamed -> ${new}"
     fi
     META_FILE="$new"
 }
 
 write_meta() {
-    [[ -z "$META_FILE" ]] && return 0
+    if [[ -z "$META_FILE" ]]; then
+        return 0
+    fi
     mkdir -p "$META_DIR" 2>/dev/null || true
     cat > "$META_FILE" <<EOF
-# wlab.sh v${VER} — Caché de metadatos. No editar manualmente.
-WLAB_VERSION=${VER}
+# wai v${VER} -- metadata cache. Do not edit by hand.
+WAI_VERSION=${VER}
 TIMESTAMP=$(date '+%s')
 DATETIME=$(date '+%Y-%m-%d %H:%M:%S')
 SSID=${SSID_NAME}
@@ -49,14 +63,14 @@ HOSTNAME=$(hostname 2>/dev/null || echo unknown)
 KERNEL=$(uname -r   2>/dev/null || echo unknown)
 EOF
     chmod 600 "$META_FILE" 2>/dev/null || true
-    ok "Metadatos guardados → ${META_FILE}"
+    ok "Metadata saved -> ${META_FILE}"
 }
 
 load_meta() {
-    [[ -z "$META_FILE" || ! -f "$META_FILE" ]] && {
-        dbg "Sin META_FILE o archivo no existe."
+    if [[ -z "$META_FILE" || ! -f "$META_FILE" ]]; then
+        dbg "No META_FILE or file does not exist."
         return 1
-    }
+    fi
 
     local ts bssid channel ssid_stored
     ts=$(         grep '^TIMESTAMP=' "$META_FILE" | cut -d'=' -f2- | tr -d '[:space:]') \
@@ -70,19 +84,19 @@ load_meta() {
 
     # Validaciones de integridad
     if [[ -z "$ts" || -z "$bssid" || -z "$channel" ]]; then
-        warn "Caché corrupta (campos vacíos) — descartando."
+        warn "Corrupt cache (empty fields) -- discarding."
         rm -f "$META_FILE"; return 1
     fi
     if [[ ! "$ts"      =~ ^[0-9]+$ ]]; then
-        warn "Caché corrupta (timestamp inválido) — descartando."
+        warn "Corrupt cache (invalid timestamp) -- discarding."
         rm -f "$META_FILE"; return 1
     fi
     if [[ ! "$bssid"   =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
-        warn "Caché corrupta (BSSID inválido) — descartando."
+        warn "Corrupt cache (invalid BSSID) -- discarding."
         rm -f "$META_FILE"; return 1
     fi
     if [[ ! "$channel" =~ ^[0-9]+$ ]]; then
-        warn "Caché corrupta (canal inválido) — descartando."
+        warn "Corrupt cache (invalid channel) -- discarding."
         rm -f "$META_FILE"; return 1
     fi
 
@@ -98,10 +112,10 @@ load_meta() {
     update_meta_name
 
     if (( age > META_MAX_AGE )); then
-        warn "Caché de '${ssid_stored}' expirada (${mins}m ${secs}s)."
+        warn "Cache for '${ssid_stored}' expired (${mins}m ${secs}s)."
         META_LOADED=2
     else
-        ok "Caché válida '${ssid_stored}' (${mins}m ${secs}s) — escaneo omitido."
+        ok "Cache valid '${ssid_stored}' (${mins}m ${secs}s) -- scan skipped."
         META_LOADED=1
     fi
     return 0

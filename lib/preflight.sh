@@ -1,52 +1,74 @@
 #!/usr/bin/env bash
-# lib/preflight.sh — Verificaciones previas al inicio
-# No ejecutar directamente. Cargado por wlab.sh
+# lib/preflight.sh -- Pre-flight verification.
+# Not executed directly. Loaded by the entrypoint.
+#
+# preflight <mode>:
+#   root      require euid 0 (default for cap, scan, mon, deth)
+#   no_root   only verify dependencies (default for opt)
+#
+# Optional tools (hcxpcapngtool, cap2hccapx, tshark) are detected here
+# exactly once and stored in HAS_* variables. No other module calls
+# `command -v` on them.
 
 preflight() {
+    local mode="${1:-root}"
     hdr "Pre-flight"
 
-    [[ $(id -u) -eq 0 ]] || die "Este script requiere privilegios root: sudo ./wlab.sh ..."
-    ok "Root: OK"
+    if [[ "$WAI_DRY_RUN" == "1" ]]; then
+        warn "DRY-RUN: no system changes will be made."
+    fi
 
-    # ── Dependencias obligatorias ──────────────────────────────────────────────
-    local miss=()
-    for dep in airmon-ng airodump-ng aireplay-ng aircrack-ng wpaclean iwctl; do
-        if command -v "$dep" &>/dev/null; then
-            dbg "  dep OK: $dep → $(command -v "$dep")"
+    if [[ "$mode" == "root" ]]; then
+        if [[ $(id -u) -ne 0 ]]; then
+            if [[ "$WAI_DRY_RUN" == "1" ]]; then
+                warn "Not root; continuing because --dry-run is set."
+            else
+                die "This command requires root: sudo wai <sub> ..."
+            fi
         else
-            miss+=("$dep")
+            ok "Root: OK"
         fi
-    done
-    (( ${#miss[@]} > 0 )) \
-        && die "Dependencias faltantes: ${miss[*]}\n  → sudo apt install aircrack-ng iwd"
-    ok "Dependencias obligatorias: OK"
+    else
+        dbg "Root not required for this subcommand."
+    fi
 
-    # ── Herramientas opcionales ────────────────────────────────────────────────
-    # Resultado guardado en HAS_* — única detección en todo el script.
-    # output.sh y capture.sh usan estas variables directamente.
-    local any_missing=0
+    if [[ "$WAI_DRY_RUN" != "1" ]]; then
+        local miss=()
+        for dep in airmon-ng airodump-ng aireplay-ng aircrack-ng wpaclean iwctl; do
+            if command -v "$dep" &>/dev/null; then
+                dbg "  dep OK: $dep -> $(command -v "$dep")"
+            else
+                miss+=("$dep")
+            fi
+        done
+        (( ${#miss[@]} > 0 )) \
+            && die "Missing dependencies: ${miss[*]}\n  -> sudo apt install aircrack-ng iwd"
+        ok "Required dependencies: OK"
+    else
+        dbg "Dependencies: skipped (dry-run)."
+    fi
+
     for opt in hcxpcapngtool cap2hccapx tshark; do
         if command -v "$opt" &>/dev/null; then
-            dbg "  opcional OK: $opt → $(command -v "$opt")"
+            dbg "  optional OK: $opt -> $(command -v "$opt")"
             case "$opt" in
                 hcxpcapngtool) HAS_HCXPCAPNGTOOL=1 ;;
                 cap2hccapx)    HAS_CAP2HCCAPX=1    ;;
                 tshark)        HAS_TSHARK=1         ;;
             esac
         else
-            dbg "  opcional ausente: $opt"
-            any_missing=1
+            dbg "  optional missing: $opt"
             case "$opt" in
                 hcxpcapngtool|cap2hccapx)
-                    warn "Herramienta opcional no encontrada: $opt  (instalar: sudo apt install hcxtools)" ;;
+                    warn "Optional tool missing: $opt  (install: sudo apt install hcxtools)" ;;
                 tshark)
-                    warn "Herramienta opcional no encontrada: tshark  (instalar: sudo apt install tshark)" ;;
+                    warn "Optional tool missing: tshark  (install: sudo apt install tshark)" ;;
             esac
         fi
     done
 
     dbg "HAS_HCXPCAPNGTOOL=${HAS_HCXPCAPNGTOOL}  HAS_CAP2HCCAPX=${HAS_CAP2HCCAPX}  HAS_TSHARK=${HAS_TSHARK}"
-    dbg "Shell: ${BASH}  versión: ${BASH_VERSION}"
-    dbg "Sistema: $(uname -a)"
+    dbg "Shell: ${BASH}  version: ${BASH_VERSION}"
+    dbg "System: $(uname -a)"
     sep
 }

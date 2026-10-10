@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
-# lib/logging.sh — Funciones de logging y color
-# No ejecutar directamente. Cargado por wlab.sh
+# lib/logging.sh -- Logging and color helpers.
+# Not executed directly. Loaded by the entrypoint.
+#
+# Every function writes to stderr. This is CRITICAL: it lets callers use
+# $(func) without the log messages contaminating the captured value.
 
-# Colores ANSI
-R='\033[0;31m'   # Rojo
-G='\033[0;32m'   # Verde
-Y='\033[1;33m'   # Amarillo
-C='\033[0;36m'   # Cyan
-B='\033[1m'      # Negrita
-N='\033[0m'      # Reset
-DIM='\033[2m'    # Tenue
-
-# CRÍTICO: todas las funciones de logging escriben a stderr (>&2)
-# Esto evita que los mensajes dbg contaminen capturas de variables $(...)
+R='\033[0;31m'
+G='\033[0;32m'
+Y='\033[1;33m'
+C='\033[0;36m'
+B='\033[1m'
+N='\033[0m'
+DIM='\033[2m'
 
 ts()   { date '+%H:%M:%S'; }
-info() { echo -e "${C}[·]${N} $(ts) $*" >&2; }
-ok()   { echo -e "${G}[✔]${N} $(ts) $*" >&2; }
+info() { echo -e "${C}[.]${N} $(ts) $*" >&2; }
+ok()   { echo -e "${G}[+]${N} $(ts) $*" >&2; }
 warn() { echo -e "${Y}[!]${N} $(ts) $*" >&2; }
-hdr()  { echo -e "\n${B}${C}── $* ──${N}" >&2; }
-sep()  { echo -e "${DIM}$(printf '─%.0s' {1..76})${N}" >&2; }
-die()  { echo -e "\n${R}[✘] $(ts) $*${N}" >&2; exit 1; }
+hdr()  { echo -e "\n${B}${C}-- $* --${N}" >&2; }
+sep()  { echo -e "${DIM}$(printf -- '-%.0s' {1..76})${N}" >&2; }
+die()  { echo -e "\n${R}[x] $(ts) $*${N}" >&2; exit 1; }
 dbg()  { echo -e "${DIM}    [dbg] $(ts) $*${N}" >&2; }

@@ -1,45 +1,58 @@
 #!/usr/bin/env bash
-# lib/constants.sh — Constantes globales del proyecto wlab
-# No ejecutar directamente. Cargado por wlab.sh
+# lib/constants.sh -- Global constants for wai.
+# Not executed directly. Loaded by the entrypoint.
 
-readonly VER="5.5"
+readonly VER="6.0"
 
-# ── Tiempos de escaneo ─────────────────────────────────────────────────────────
-# Los escaneos necesitan tiempo fijo porque airodump escucha pasivamente;
-# no existe evento que indique "ya vi todo". Se usa el mínimo razonable.
-readonly SCAN_SEC=20          # Escaneo general de APs (segundos)
-readonly SCAN_CLIENT_SEC=12   # Escaneo de clientes del AP objetivo (segundos)
-
-# ── Captura de handshake ───────────────────────────────────────────────────────
-# NO hay tiempo predefinido de espera: el monitor sale en cuanto detecta
-# handshake. CAP_MAX_SEC es únicamente un límite de seguridad antibloqueo
-# por si el AP no genera tráfico en absoluto.
-readonly CAP_MAX_SEC=90       # Límite de seguridad por intento (segundos)
-
-# ── Deauth ─────────────────────────────────────────────────────────────────────
-# DEAUTH_N: paquetes por llamada aireplay-ng. 8 fuerza desconexión fiablemente;
-# más paquetes no mejoran el resultado.
+readonly SCAN_SEC=20
+readonly SCAN_CLIENT_SEC=12
+readonly CAP_MAX_SEC=90
 readonly DEAUTH_N=8
-# DEAUTH_ROUNDS: ciclos de deauth por intento. 2 como red de seguridad;
-# en la práctica el handshake llega en la primera ráfaga.
 readonly DEAUTH_ROUNDS=2
-# Pausa entre rondas: tiempo para que el cliente reautentique y genere 4-way.
 readonly DEAUTH_INTERVAL=3
-
-# ── Caché ──────────────────────────────────────────────────────────────────────
-readonly META_MAX_AGE=1800    # Validez de caché: 30 minutos
-readonly META_DIR="${HOME}/wssids"
-
-# ── Intentos ───────────────────────────────────────────────────────────────────
-# Fijo e independiente del número de clientes detectados.
+readonly META_MAX_AGE=1800
+# Metadata cache directory. Follows the XDG Base Directory spec so
+# nothing lands in $HOME directly. LEGACY_META_DIR is the previous
+# location kept for a one-time migration in init_meta().
+readonly META_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/wai"
+readonly LEGACY_META_DIR="${HOME}/wssids"
 readonly MAX_TRIES_DEFAULT=3
 
-# ── Herramientas opcionales ────────────────────────────────────────────────────
-# Detectadas UNA sola vez en preflight() y exportadas aquí.
-# output.sh y capture.sh leen estas variables — nunca vuelven a hacer command -v.
-HAS_HCXPCAPNGTOOL=""   # "1" si disponible
-HAS_CAP2HCCAPX=""      # "1" si disponible
-HAS_TSHARK=""          # "1" si disponible
+HAS_HCXPCAPNGTOOL=""
+HAS_CAP2HCCAPX=""
+HAS_TSHARK=""
 
-# ── Directorio temporal ────────────────────────────────────────────────────────
+# Dry-run: when 1, state-changing actions are printed instead of executed.
+# Enabled by --dry-run / -n or by exporting WAI_DRY_RUN=1. Lets the whole
+# flow be exercised on a non-root host (Termux) without touching the
+# network stack.
+WAI_DRY_RUN="${WAI_DRY_RUN:-0}"
+
+# Cross-invocation state (mon on then mon off, or cmd_* after mon on).
+# WAI_STATE_FILE carries the iwd state and interface so a later process
+# can restore the system.
+readonly WAI_STATE_FILE="${TMPDIR:-/tmp}/wai.state"
+
+# Per-process temp directory. Cleaned by cleanup().
 readonly TMP=$(mktemp -d "${TMPDIR:-/tmp}/wai.XXXXXX")
+
+# _sys: run a command unless WAI_DRY_RUN=1, in which case print it.
+_sys() {
+    if [[ "$WAI_DRY_RUN" == "1" ]]; then
+        dbg "[dry-run] $*"
+        return 0
+    fi
+    "$@"
+}
+
+# _sys_bg: background version. Echoes the PID to stdout; in dry-run it
+# echoes 0 so callers can still use it as a placeholder.
+_sys_bg() {
+    if [[ "$WAI_DRY_RUN" == "1" ]]; then
+        dbg "[dry-run] $* (background)"
+        echo 0
+        return 0
+    fi
+    "$@" &
+    echo $!
+}

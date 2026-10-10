@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# lib/scan.sh — Escaneo de redes y resolución de BSSID/Canal desde SSID
-# No ejecutar directamente. Cargado por wlab.sh
+# lib/scan.sh -- Network scan and BSSID/channel resolution.
+# Not executed directly. Loaded by the entrypoint.
 
 run_scan() {
     local duration="${1:-$SCAN_SEC}"
+    if [[ "$WAI_DRY_RUN" == "1" ]]; then
+        dbg "[dry-run] airodump-ng scan (${duration}s) on $MON"
+        return 0
+    fi
     rm -f "${TMP}/scan-01.csv" 2>/dev/null || true
-    info "Escaneo de redes (${duration}s) → ${TMP}/scan.log"
+    info "Network scan (${duration}s) -> ${TMP}/scan.log"
 
     # Redirigir stdout+stderr a archivo — evita suspend en zsh y permite captura real
     airodump-ng \
@@ -17,67 +21,95 @@ run_scan() {
 
     local i=0
     while kill -0 "$scan_pid" 2>/dev/null && (( i < duration )); do
-        printf "\r  ${C}Escaneando... %2ds${N}" "$(( duration - i ))" >&2
+        printf "\r  ${C}Scanning... %2ds${N}" "$(( duration - i ))" >&2
         sleep 1; i=$(( i+1 ))
     done
-    printf "\r  ${C}Escaneo completado.       ${N}\n" >&2
+    printf "\r  ${C}Scan finished.            ${N}\n" >&2
 
     kill "$scan_pid" 2>/dev/null || true
     wait "$scan_pid" 2>/dev/null || true
 
     if [[ ! -f "${TMP}/scan-01.csv" ]]; then
-        warn "Log airodump-ng (escaneo):"
+        warn "airodump-ng log (scan):"
         while IFS= read -r l; do warn "  $l"; done < "${TMP}/scan.log" 2>/dev/null || true
-        die "Sin CSV tras escaneo. ¿${MON} en monitor mode y UP?"
+        die "No CSV after scan. Is ${MON} in monitor mode and UP?"
     fi
 
     local ap_count
     ap_count=$(grep -c '^[0-9A-Fa-f]\{2\}:' "${TMP}/scan-01.csv" 2>/dev/null || echo 0)
-    dbg "APs detectados en CSV: ${ap_count}"
+    dbg "APs found in CSV: ${ap_count}"
 
     if [[ "$ap_count" -eq 0 ]]; then
-        warn "CSV vacío. Log airodump-ng:"
+        warn "Empty CSV. airodump-ng log:"
         while IFS= read -r l; do warn "  $l"; done < "${TMP}/scan.log" 2>/dev/null || true
-        die "Escaneo sin resultados. ¿Interfaz en monitor mode?"
+        die "Scan produced no results. Is the interface in monitor mode?"
     fi
 }
 
 resolve_target() {
-    hdr "Resolución de objetivo"
+    hdr "Target resolution"
 
-    local is_bssid=0
-    [[ "$TARGET" =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]] && is_bssid=1
-    dbg "TARGET='${TARGET}'  is_bssid=${is_bssid}  META_LOADED=${META_LOADED}  CHANNEL='${CHANNEL}'"
-
-    # Caché válida — no hace falta escanear
-    if (( META_LOADED >= 1 )) && [[ -n "$CHANNEL" ]]; then
-        TARGET="${TARGET^^}"
-        local src="caché fresca"
-        (( META_LOADED == 2 )) && src="caché expirada"
-        ok "BSSID=${TARGET}  Canal=${CHANNEL}  SSID='${SSID_NAME}'  (${src})"
+    if [[ "$WAI_DRY_RUN" == "1" ]]; then
+        # Simulate resolution without touching the network. Accept any
+        # token as-is so the rest of the flow can be exercised.
+        if [[ "$TARGET" =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
+            TARGET="${TARGET^^}"
+            if [[ -z "$SSID_NAME" ]]; then
+                SSID_NAME="$TARGET"
+            fi
+        else
+            SSID_NAME="$TARGET"
+            TARGET="AA:BB:CC:DD:EE:FF"
+        fi
+        if [[ -z "$CHANNEL" ]]; then
+            CHANNEL=6
+        fi
+        dbg "[dry-run] resolved: BSSID=${TARGET}  Channel=${CHANNEL}  SSID=${SSID_NAME}"
+        ok "BSSID=${TARGET}  Channel=${CHANNEL}  SSID='${SSID_NAME}'  (dry-run)"
         return 0
     fi
 
-    # BSSID y canal dados directamente por argumento
+    local is_bssid=0
+    if [[ "$TARGET" =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
+        is_bssid=1
+    fi
+    dbg "TARGET='${TARGET}'  is_bssid=${is_bssid}  META_LOADED=${META_LOADED}  CHANNEL='${CHANNEL}'"
+
+    # Valid cache -- no scan needed
+    if (( META_LOADED >= 1 )) && [[ -n "$CHANNEL" ]]; then
+        TARGET="${TARGET^^}"
+        local src="fresh cache"
+        if (( META_LOADED == 2 )); then
+            src="stale cache"
+        fi
+        ok "BSSID=${TARGET}  Channel=${CHANNEL}  SSID='${SSID_NAME}'  (${src})"
+        return 0
+    fi
+
+    # BSSID and channel given directly as arguments
     if (( is_bssid )) && [[ -n "$CHANNEL" ]]; then
         TARGET="${TARGET^^}"
-        [[ -z "$SSID_NAME" ]] && SSID_NAME="$TARGET"
-        ok "BSSID=${TARGET}  Canal=${CHANNEL}  (argumentos directos)"
+        if [[ -z "$SSID_NAME" ]]; then
+            SSID_NAME="$TARGET"
+        fi
+        ok "BSSID=${TARGET}  Channel=${CHANNEL}  (direct args)"
         update_meta_name; write_meta; return 0
     fi
 
-    # Necesita escanear
+    # Scan needed
     run_scan
     local csv="${TMP}/scan-01.csv"
 
     if (( is_bssid )); then
-        # Buscar canal por BSSID
+        # Find channel by BSSID
         CHANNEL=$(awk -F',' -v b="${TARGET^^}" '
             /^[0-9A-Fa-f]{2}:/ {
                 gsub(/ /,"",$1); gsub(/ /,"",$4)
                 if (toupper($1)==b) { print $4; exit }
             }' "$csv")
-        [[ -z "$CHANNEL" ]] && die "Canal no encontrado para ${TARGET}. Usa -c <canal>."
+        if [[ -z "$CHANNEL" ]]; then
+            die "Channel not found for ${TARGET}. Use -c <channel>."
+        fi
 
         local ssid_found
         ssid_found=$(awk -F',' -v b="${TARGET^^}" '
@@ -88,8 +120,8 @@ resolve_target() {
         SSID_NAME="${ssid_found:-$TARGET}"
 
     else
-        # Buscar BSSID+canal por nombre de SSID
-        dbg "Buscando SSID '${TARGET}' en CSV..."
+        # Find BSSID+channel by SSID name
+        dbg "Looking for SSID '${TARGET}' in CSV..."
         local row
         row=$(awk -F',' -v s="$TARGET" '
             /^[0-9A-Fa-f]{2}:/ {
@@ -98,23 +130,23 @@ resolve_target() {
             }' "$csv") || true
 
         if [[ -z "$row" ]]; then
-            warn "SSID '${TARGET}' no encontrado. Redes detectadas:"
+            warn "SSID '${TARGET}' not found. Networks detected:"
             awk -F',' '/^[0-9A-Fa-f]{2}:/{
                 for(i=1;i<=NF;i++) gsub(/^ +| +$/,"",$i)
                 if($14!="" && $14!="ESSID")
                     printf "  BSSID=%-20s  Ch=%-3s  Enc=%-10s  SSID=%s\n",$1,$4,$6,$14
             }' "$csv" | head -20 >&2
-            die "SSID '${TARGET}' no encontrado en el escaneo."
+            die "SSID '${TARGET}' not found in scan."
         fi
 
         SSID_NAME="$TARGET"
         TARGET=$(cut -d'|' -f1 <<< "$row")
         CHANNEL=${CHANNEL:-$(cut -d'|' -f2 <<< "$row")}
-        dbg "Resuelto: BSSID=${TARGET}  CHANNEL=${CHANNEL}"
+        dbg "Resolved: BSSID=${TARGET}  CHANNEL=${CHANNEL}"
     fi
 
     TARGET="${TARGET^^}"
     update_meta_name
-    ok "BSSID=${TARGET}  Canal=${CHANNEL}  SSID='${SSID_NAME}'"
+    ok "BSSID=${TARGET}  Channel=${CHANNEL}  SSID='${SSID_NAME}'"
     write_meta
 }
