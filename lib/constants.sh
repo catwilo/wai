@@ -42,4 +42,4 @@ HAS_CAP2HCCAPX=""      # "1" si disponible
 HAS_TSHARK=""          # "1" si disponible
 
 # ── Directorio temporal ────────────────────────────────────────────────────────
-readonly TMP=$(mktemp -d /tmp/wlab.XXXXXX)
+readonly TMP=$(mktemp -d "${TMPDIR:-/tmp}/wai.XXXXXX")

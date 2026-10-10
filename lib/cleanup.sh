@@ -53,5 +53,10 @@ cleanup() {
         || warn "Finalizado con errores (rc=${rc})."
 }
 
-trap cleanup EXIT
-trap 'warn "Señal INT/TERM recibida."; exit 130' INT TERM
+install_trap() {
+    # Registrado por cada cmd_<sub> tras preflight, NUNCA al cargar el
+    # modulo: asi, invocaciones que no tocan el sistema (usage, -h)
+    # no disparan cleanup ni imprimen ruido.
+    trap cleanup EXIT
+    trap 'warn "Señal INT/TERM recibida."; exit 130' INT TERM
+}

