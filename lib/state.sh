@@ -10,8 +10,6 @@ OUTDIR="$(pwd)"
 
 MON=""
 CAP_FILE=""
-IWD_WAS_UP=0
-IWD_NET=""
 
 META_FILE=""
 META_LOADED=0
@@ -23,7 +21,7 @@ declare -a TARGETS_RAW=()
 declare -a SESSION_RESULTS=()
 
 # _reset_target_state: clears per-target state before the next target.
-# Does NOT touch IFACE, MON, OUTDIR, IWD_*, or SESSION_RESULTS.
+# Does NOT touch IFACE, MON, OUTDIR, or SESSION_RESULTS.
 _reset_target_state() {
     TARGET=""
     SSID_NAME=""

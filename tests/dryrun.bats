@@ -36,10 +36,22 @@ setup() { setup_env; }
     [[ "$output" == *"Finished OK"* ]]
 }
 
-@test "dry-run leaves no WAI_STATE_FILE behind" {
-    run bash "$WAI" cap -i wlan0 -t CleanState -o "$OUT" -n
+@test "dry-run no invoca wifi-setup (backend) para monitor" {
+    # dry-run debe imprimir la accion sin llamar a wifi. Un binario
+    # wifi falso en PATH que falla si es invocado, verifica esto.
+    local fakebin="$BATS_TEST_TMPDIR/fakebin"
+    mkdir -p "$fakebin"
+    cat > "$fakebin/wifi" <<'FAKE'
+#!/usr/bin/env bash
+echo "FAKE wifi llamado en dry-run" >&2
+exit 99
+FAKE
+    chmod +x "$fakebin/wifi"
+
+    PATH="$fakebin:$PATH" run bash "$WAI" cap -i wlan0 -t CleanState -o "$OUT" -n
     [ "$status" -eq 0 ]
-    [ ! -f "$TMPDIR/wai.state" ]
+    [[ "$output" == *"[dry-run] wifi monitor on wlan0"* ]]
+    [[ "$output" != *"FAKE wifi llamado"* ]]
 }
 
 @test "launcher resolves symlink: invoking via a symlink works" {

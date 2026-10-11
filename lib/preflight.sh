@@ -6,9 +6,15 @@
 #   root      require euid 0 (default for cap, scan, mon, deth)
 #   no_root   only verify dependencies (default for opt)
 #
-# Optional tools (hcxpcapngtool, cap2hccapx, tshark) are detected here
-# exactly once and stored in HAS_* variables. No other module calls
-# `command -v` on them.
+# Dependencias obligatorias: aircrack-ng suite (airodump-ng, aireplay-ng,
+# aircrack-ng, wpaclean) + wifi-setup (backend de red).
+#
+# iwctl y airmon-ng ya NO son dependencias: el modo monitor se delega a
+# wifi-setup, que maneja NetworkManager. iwd queda como fallback manual
+# del sistema, no es dependencia de wai.
+#
+# Herramientas opcionales (hcxpcapngtool, cap2hccapx, tshark) se detectan
+# UNA vez y se guardan en HAS_*.
 
 preflight() {
     local mode="${1:-root}"
@@ -34,7 +40,7 @@ preflight() {
 
     if [[ "$WAI_DRY_RUN" != "1" ]]; then
         local miss=()
-        for dep in airmon-ng airodump-ng aireplay-ng aircrack-ng wpaclean iwctl; do
+        for dep in airodump-ng aireplay-ng aircrack-ng wpaclean wifi; do
             if command -v "$dep" &>/dev/null; then
                 dbg "  dep OK: $dep -> $(command -v "$dep")"
             else
@@ -42,7 +48,7 @@ preflight() {
             fi
         done
         ((${#miss[@]} > 0)) &&
-            die "Missing dependencies: ${miss[*]}\n  -> sudo apt install aircrack-ng iwd"
+            die "Missing dependencies: ${miss[*]}\n  -> aircrack-ng: sudo apt install aircrack-ng\n  -> wifi-setup: ut distribute --install wifi-setup"
         ok "Required dependencies: OK"
     else
         dbg "Dependencies: skipped (dry-run)."

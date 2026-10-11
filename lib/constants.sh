@@ -28,11 +28,6 @@ HAS_TSHARK=""
 # network stack.
 WAI_DRY_RUN="${WAI_DRY_RUN:-0}"
 
-# Cross-invocation state (mon on then mon off, or cmd_* after mon on).
-# WAI_STATE_FILE carries the iwd state and interface so a later process
-# can restore the system.
-readonly WAI_STATE_FILE="${TMPDIR:-/tmp}/wai.state"
-
 # Per-process temp directory. Cleaned by cleanup().
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/wai.XXXXXX")
 readonly TMP

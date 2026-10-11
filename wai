@@ -19,7 +19,6 @@ source "${LIB_DIR}/cleanup.sh"
 source "${LIB_DIR}/args.sh"
 source "${LIB_DIR}/meta.sh"
 source "${LIB_DIR}/preflight.sh"
-source "${LIB_DIR}/iwd.sh"
 source "${LIB_DIR}/monitor.sh"
 source "${LIB_DIR}/scan.sh"
 source "${LIB_DIR}/clients.sh"
@@ -48,7 +47,6 @@ cmd_cap() {
     banner "cap"
     preflight root
     install_trap
-    save_and_stop_iwd
     monitor_up
 
     local total_targets=${#TARGETS_RAW[@]}
@@ -95,7 +93,6 @@ cmd_scan() {
     banner "scan"
     preflight root
     install_trap
-    save_and_stop_iwd
     monitor_up
     run_scan "$SCAN_SEC"
     ok "Scan finished. CSV at ${TMP}/scan-01.csv"
@@ -109,7 +106,6 @@ cmd_mon() {
     on)
         preflight root
         install_trap
-        save_and_stop_iwd
         monitor_up
         ok "Monitor mode active: ${MON}"
         info "Run 'wai mon off' or Ctrl+C to restore the system."
@@ -119,13 +115,6 @@ cmd_mon() {
     off)
         preflight root
         install_trap
-        if [[ -f "$WAI_STATE_FILE" ]]; then
-            # shellcheck disable=SC1090
-            source "$WAI_STATE_FILE" 2>/dev/null || true
-            IWD_WAS_UP="${IWD_STATE_WAS_UP:-0}"
-            IWD_NET="${IWD_STATE_NET:-}"
-            IFACE="${IFACE:-${IWD_STATE_IFACE:-}}"
-        fi
         monitor_down
         ;;
     esac
@@ -136,7 +125,6 @@ cmd_deth() {
     banner "deth"
     preflight root
     install_trap
-    save_and_stop_iwd
     monitor_up
 
     TARGET="${BSSID^^}"

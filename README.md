@@ -5,6 +5,11 @@ SOLO PARA REDES PROPIAS O AUTORIZADAS -- USO EDUCATIVO / LAB
 CLI para capturar handshakes WPA2 en redes propias. Orquesta cinco
 subcomandos sobre un conjunto de modulos en `lib/`.
 
+**Backend de red: wifi-setup.** wai no toca NetworkManager, iwd ni
+dhcpcd. El modo monitor se delega a `wifi monitor on/off <iface>`, que
+es la herramienta que controla las antenas. Instala wifi-setup primero:
+`ut distribute --install wifi-setup`.
+
 ---
 
 ## Instalacion
@@ -47,6 +52,17 @@ Crea un symlink en `~/.local/bin/wai`. Requiere root para ejecutar
     sudo wai deth -i wlan0 -t AA:BB:CC:DD:EE:FF -c 11:22:33:44:55:66
     sudo wai opt -o ~/caps capture1.cap capture2.cap
 
+### Elegir la antena
+
+Si el equipo tiene dos antenas WiFi, elegi como `-i` la que vas a usar
+para captura. La otra antena mantiene la conexion (y tu sesion SSH).
+wai aborta automaticamente si:
+
+- La iface elegida lleva la sesion SSH actual.
+- No hay otra antena WiFi con IP (a menos que pases `WAI_FORCE=1`).
+
+Revisa el inventario con `wifi ifaces`.
+
 ### Dry-run
 
 `-n` (o `WAI_DRY_RUN=1` en el entorno) recorre todo el flujo sin ejecutar
@@ -55,6 +71,7 @@ nada contra el hardware ni el sistema de archivos. Verifica:
 - Que los argumentos se parsean y validan correctamente.
 - Que la secuencia de pasos por subcomando es la esperada.
 - Que los archivos que se escribirian, se reportan sin escribirlos.
+- Que la llamada a `wifi monitor on/off` se imprime sin ejecutar.
 
 Se puede correr sin root; permite probar el CLI desde cualquier host.
 
@@ -62,7 +79,8 @@ Se puede correr sin root; permite probar el CLI desde cualquier host.
 
 Obligatorias:
 
-    sudo apt install aircrack-ng iwd
+    sudo apt install aircrack-ng       # airodump-ng, aireplay-ng, aircrack-ng, wpaclean
+    ut distribute --install wifi-setup # backend de red (NetworkManager)
 
 Opcionales (mejoran la salida):
 
@@ -80,23 +98,16 @@ Opcionales (mejoran la salida):
         |-- constants.sh     # tiempos, rutas, version, WAI_DRY_RUN
         |-- logging.sh       # info/ok/warn/die/dbg -- todos a stderr
         |-- state.sh         # variables mutables + estado por target
-        |-- cleanup.sh       # trap EXIT/INT: restaurar iwd y monitor
+        |-- cleanup.sh       # trap EXIT/INT: matar capturadores + managed
         |-- args.sh          # parseo por subcomando
         |-- preflight.sh     # root (opcional) + dependencias
         |-- meta.sh          # cache de metadatos por red (XDG data dir)
-        |-- iwd.sh           # detener/restaurar iwd (con estado entre procesos)
-        |-- monitor.sh       # monitor_up/monitor_down (unico punto de entrada)
+        |-- monitor.sh       # monitor_up/monitor_down: delegan a wifi-setup
         |-- scan.sh          # escaneo y resolucion de BSSID/canal
         |-- clients.sh       # deteccion de clientes del AP
         |-- deauth.sh        # deauth dirigido + broadcast
         |-- capture.sh       # captura del handshake y verificacion
-        |-- output.sh        # wpaclean, conversion y resumen
-    `-- tests/               # suite BATS -- bash tests/run.sh
-        |-- helpers.bash     # setup aislado por test (HOME/XDG/TMPDIR)
-        |-- cli.bats         # dispatch: -V, -h, subcomando desconocido
-        |-- args.bats        # validacion de formato por subcomando
-        |-- dryrun.bats      # flujo completo con -n
-        `-- run.sh           # runner: una linea por test
+        `-- output.sh        # wpaclean, conversion y resumen
 
 ## Tests
 
@@ -113,7 +124,9 @@ Cobertura actual:
     args.bats     validacion de formato por subcomando (BSSID, MAC,
                   canal, faltantes).
     dryrun.bats   flujo completo con -n: scan, cap (-t multiple),
-                  deth, y limpieza de WAI_STATE_FILE.
+                  deth, y la no-invocacion de wifi en dry-run.
+    monitor.bats  chequeos de seguridad: iface lleva SSH -> die;
+                  sin otra wifi con IP -> die salvo WAI_FORCE=1.
 
 ## Licencia
 
