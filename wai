@@ -14,6 +14,7 @@ LIB_DIR="${WAI_DIR}/lib"
 
 source "${LIB_DIR}/constants.sh"
 source "${LIB_DIR}/logging.sh"
+source "${LIB_DIR}/help.sh"
 source "${LIB_DIR}/state.sh"
 source "${LIB_DIR}/cleanup.sh"
 source "${LIB_DIR}/args.sh"
@@ -28,6 +29,22 @@ source "${LIB_DIR}/output.sh"
 
 main() {
     local sub="${1:-}"
+    local arg2="${2:-}"
+
+    # Per-subcommand help: intercept BEFORE any preflight or trap, so
+    # 'wai <sub> -h' works without root and without cleanup noise.
+    case "${arg2}" in
+    -h | --help)
+        case "${sub}" in
+        cap)  help_cap;  exit 0 ;;
+        scan) help_scan; exit 0 ;;
+        mon)  help_mon;  exit 0 ;;
+        deth) help_deth; exit 0 ;;
+        opt)  help_opt;  exit 0 ;;
+        esac
+        ;;
+    esac
+
     shift || true
 
     case "$sub" in

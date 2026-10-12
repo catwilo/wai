@@ -5,38 +5,9 @@
 # Every parse_<sub>_args fills the global state and calls the relevant
 # validators. All parsers accept -h (usage), -V (version), -n (dry-run).
 
-usage() {
-    cat >&2 <<'USAGE'
-wai -- WPA2 Handshake Capture CLI (authorized networks only)
-
-  Usage:  sudo wai <subcommand> [flags]
-
-  Subcommands:
-    cap    Full flow: scan -> monitor -> deauth -> capture -> optimize
-    scan   Scan and list visible networks only
-    mon    Enable/disable monitor mode:  wai mon -i <iface> on|off
-    deth   Directed deauth to one client:  wai deth -i <iface> -t <BSSID> -c <MAC>
-    opt    Convert existing .cap files:  wai opt -o <dir> <file.cap>...
-
-  Common flags:
-    -i  Physical interface     (e.g. wlan0)                       [cap|scan|mon|deth]
-    -t  BSSID or SSID          (repeatable on cap)                [cap|deth]
-    -c  Channel (cap/scan) - client MAC (deth)                    [cap|scan|deth]
-    -o  Output directory       (default: current dir)             [cap|opt]
-    -n  Dry-run: print actions, change nothing                    [all]
-    -h  This help                                                 [all]
-    -V  Version                                                   [all]
-
-  Examples:
-    sudo wai cap -i wlan0 -t MyNet -t AA:BB:CC:DD:EE:FF
-    sudo wai cap -i wlan0 -t MyNet --dry-run
-    sudo wai scan -i wlan0
-    sudo wai mon -i wlan0 on
-    sudo wai deth -i wlan0 -t AA:BB:CC:DD:EE:FF -c 11:22:33:44:55:66
-    sudo wai opt -o ~/caps cap1.cap cap2.cap
-USAGE
-    exit 0
-}
+# usage() is a thin alias for help_index. Full help lives in
+# lib/help.sh, sourced by the entrypoint before this module.
+usage() { help_index; }
 
 version() {
     echo "wai v${VER}"
