@@ -1,3 +1,7 @@
 *.bak
 *.part
 *.log
+*.cap
+*.22000
+*.hccapx
+*.info

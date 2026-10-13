@@ -9,9 +9,10 @@
 # lib/help.sh, sourced by the entrypoint before this module.
 usage() { help_index; }
 
-version() {
-    echo "wai v${VER}"
-    exit 0
+banner() {
+    local sub="$1"
+    echo -e "\n${B}${C}  wai v${VER} -- ${sub}${N}  |  authorized networks only" >&2
+    echo -e "${DIM}  Shell: ${BASH}${N}\n" >&2
 }
 
 banner() {
@@ -21,9 +22,6 @@ banner() {
 }
 
 _require_iface() {
-    # Idiomatic under `set -e`: use `||` so a satisfied condition is
-    # a success (rc=0), not a bare `[[ ... ]] &&` whose false result
-    # would abort the script.
     [[ -n "$IFACE" ]] || die "Missing required argument: -i <interface>"
 }
 
@@ -158,4 +156,33 @@ parse_opt_args() {
     fi
     _validate_outdir
     dbg "opt args: OUTDIR=${OUTDIR} FILES=(${OPT_FILES[*]}) DRY=${WAI_DRY_RUN}"
+}
+
+# parse_scope_args -- 'wai scope' no acepta flags: los args son
+# posicionales y cmd_scope los interpreta (show|edit|add|rm|clear).
+parse_scope_args() { :; }
+
+# parse_run_args -- 'wai run' recorre el scope y corre el flujo cap
+# por cada entrada. -o es opcional; default ~/.wai/captures/run-<ts>/.
+parse_run_args() {
+    local explicit_out=""
+    while getopts ":i:o:nVh" opt; do
+        case $opt in
+        i) IFACE="$OPTARG" ;;
+        o) explicit_out="$OPTARG" ;;
+        n) WAI_DRY_RUN=1 ;;
+        V) version ;;
+        h) usage ;;
+        :) die "Option -${OPTARG} requires an argument." ;;
+        *) die "Unknown option: -${OPTARG}  (use -h for help)" ;;
+        esac
+    done
+    _require_iface
+    if [[ -n "$explicit_out" ]]; then
+        OUTDIR="$explicit_out"
+    else
+        OUTDIR="${CAPTURES_DIR}/run-$(date +%Y%m%d-%H%M%S)"
+    fi
+    _validate_outdir
+    dbg "run args: IFACE=${IFACE} OUTDIR=${OUTDIR} DRY=${WAI_DRY_RUN}"
 }

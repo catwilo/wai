@@ -23,32 +23,50 @@ otro gestor, wai no se entera.
 
 ## Subcomandos
 
-    cap     preflight root -> install_trap -> monitor_up -> loop -> summary
+    cap     preflight root -> install_trap -> monitor_up -> _run_targets
     scan    preflight root -> install_trap -> monitor_up -> run_scan
     mon     preflight root -> install_trap -> monitor_up (on)
             preflight root -> install_trap -> monitor_down (off)
     deth    preflight root -> install_trap -> monitor_up -> aireplay-ng
     opt     preflight no_root -> install_trap -> loop optimize
+    scope   sin preflight, sin trap: gestiona ~/.wai/scope
+    run     preflight root -> install_trap -> scope_init -> monitor_up
+            -> _run_targets
 
-`opt` es el unico subcomando que no toca la red: solo convierte archivos
-.cap locales, por lo que preflight se invoca en modo `no_root`.
+`opt` y `scope` no tocan la red: `opt` solo convierte `.cap` locales,
+`scope` solo edita un archivo en `~/.wai/`. `run` reutiliza el flujo de
+`cap`: ambos comparten `_run_targets`, la unica copia del bucle por
+target.
+
+## Estado persistente del usuario
+
+Todo vive fuera del repo:
+
+    ~/.wai/               (modo 700)
+    ~/.wai/scope          (modo 600) lista de redes autorizadas
+    ~/.wai/captures/      (modo 700) destino por defecto de `wai run`
+    ~/.local/share/wai/   (modo 700) cache de metadatos por red
+
+Nada de esto se versiona: es material de laboratorio. El repo puede
+borrarse y reinstalarse sin perder capturas ni scope.
 
 ## Responsabilidad por archivo
 
 ### Raiz
 
     wai             Entrypoint. Carga modulos en orden, despacha a
-                    `cmd_<sub>`. No contiene logica de captura.
+                    `cmd_<sub>`. Contiene `_run_targets`, el bucle comun
+                    a `cap` y `run`.
 
     install.sh      Symlink a ~/.local/bin/wai. Nunca copia.
 
     README.md       Usuario: que hace, como se instala, como se usa,
-                    flags comunes, dry-run, backend wifi-setup.
+                    flags comunes, scope, dry-run, backend wifi-setup.
 
     ARCHITECTURE.md Este archivo. Mantenedor: responsabilidades, flujo,
                     decisiones no obvias.
 
-    .gitignore      *.bak, *.part, *.log.
+    .gitignore      *.bak, *.part, *.log, *.cap, *.22000, *.hccapx, *.info.
 
     .editorconfig   Estandar de formato del repo.
 
@@ -62,6 +80,11 @@ otro gestor, wai no se entera.
                     escriben a stderr. CRITICO: permite usar $(func) sin
                     que los mensajes contaminen el valor capturado.
 
+    help.sh         help_index + help_<sub>. Unico lugar del texto de
+                    ayuda. El dispatcher enruta -h/--help ANTES de
+                    preflight, asi `wai <sub> -h` funciona sin root y
+                    sin disparar el trap de cleanup.
+
     state.sh        Variables mutables (IFACE, TARGET, MON, ...) y
                     _reset_target_state para limpiar entre targets.
 
@@ -72,9 +95,10 @@ otro gestor, wai no se entera.
                     cleanup mata capturadores vivos y delega el regreso
                     a managed a `wifi monitor off` via monitor_down().
 
-    args.sh         Un `parse_<sub>_args` por subcomando + `usage` +
-                    `version` + `banner`. Valida formatos (BSSID, MAC,
-                    canal) y crea OUTDIR. Unico lugar donde se leen flags.
+    args.sh         Un `parse_<sub>_args` por subcomando + `usage` (alias
+                    de help_index) + `banner`. Valida formatos (BSSID,
+                    MAC, canal) y crea OUTDIR. Unico lugar donde se leen
+                    flags.
 
     preflight.sh    preflight <root|no_root>. Dependencias obligatorias:
                     airodump-ng, aireplay-ng, aircrack-ng, wpaclean, wifi.
@@ -86,6 +110,13 @@ otro gestor, wai no se entera.
                     with a one-time migration from the legacy
                     ~/wssids path in init_meta().
                     TTL: META_MAX_AGE. Integrity checked on read.
+
+    scope.sh        ~/.wai/scope + CAPTURES_DIR. Lista de redes
+                    autorizadas (una por linea, `#` comenta) y destino
+                    por defecto de `wai run`. scope_add rechaza vacios y
+                    entradas con `#` inicial. scope_rm y scope_clear
+                    son atomicos (mktemp + mv). Permisos: dir 700,
+                    archivo 600.
 
     monitor.sh      monitor_up / monitor_down: UNICO punto de entrada a
                     control de modo monitor. Delegan a `wifi monitor
@@ -122,7 +153,7 @@ otro gestor, wai no se entera.
     -> preflight root
     -> install_trap
     -> monitor_up  (valida seguridad + delega a `wifi monitor on`)
-    -> loop targets:
+    -> _run_targets:
         _reset_target_state
         -> init_meta -> load_meta (o escaneo completo)
         -> resolve_target (BSSID, canal)
@@ -135,6 +166,22 @@ otro gestor, wai no se entera.
         -> optimize (wpaclean + conversion)
     -> summary
     (EXIT trap: cleanup mata capturadores, monitor_down devuelve iface)
+
+## Flujo de `run`
+
+    parse_run_args -> banner
+    -> preflight root
+    -> install_trap
+    -> scope_init (crea ~/.wai/ y ~/.wai/scope si faltan)
+    -> scope_read -> TARGETS_RAW[]
+    -> monitor_up
+    -> _run_targets (identico al de `cap`, sin duplicar codigo)
+    -> summary
+
+`run` no toca `scan`, `clients`, `deauth`, `capture` ni `output`
+directamente: reusa el mismo pipeline que `cap` via `_run_targets`.
+La unica diferencia con `cap` es de donde salen los targets: `cap` los
+recibe como `-t`, `run` los lee de `~/.wai/scope`.
 
 ## Decisiones no obvias
 
@@ -150,7 +197,8 @@ vigente. La regla es simple: si toca la red, va por `wifi`.
 Cada fase es una operacion con valor propio: `scan` sin tocar la red,
 `mon` para dejar la interfaz en monitor entre sesiones, `opt` para
 convertir capturas ya existentes, `deth` para depurar un cliente
-especifico.
+especifico, `scope` para revisar la lista antes de capturar, `run` para
+procesar la lista completa.
 
 ### Por que todos los logs van a stderr
 
@@ -172,7 +220,8 @@ recorre sin tocar el sistema, incluida la llamada a `wifi monitor`
 Si el trap se registrara en el `source` de cleanup.sh, cualquier
 invocacion (incluso `wai -h`) imprimiria "Cleaning up..." al salir.
 Registrarlo desde cada cmd_<sub> despues de preflight lo mantiene
-donde debe estar: solo cuando el subcomando toca el sistema.
+donde debe estar: solo cuando el subcomando toca el sistema. Ademas,
+`-h` por subcomando se intercepta ANTES de preflight en el dispatcher.
 
 ### Por que los chequeos de seguridad antes de entrar en monitor
 
@@ -194,6 +243,30 @@ broadcast no autenticado. El deauth dirigido por MAC del cliente
 fuerza reautenticacion individual y es la unica tecnica que funciona
 contra stacks WPA2 modernos.
 
+### Por que `wai scan` no escribe en el scope
+
+`scan` ve todas las redes del aire. Escribirlas automaticamente en
+`~/.wai/scope` convertiria una accion de reconocimiento en una accion
+de captura no decidida. El usuario promueve entradas a mano (o con
+`wai scope add`), y solo lo que este en el archivo se captura con
+`wai run`. La seguridad de terceros depende de ese corte.
+
+### Por que el scope vive en ~/.wai/ y no en el repo
+
+Es material de laboratorio especifico del usuario y de la maquina:
+lista de redes, capturas, metadatos. Versionarlo filtraria la
+informacion a `git`, la compartiria con cualquier clone y rompe el
+limite entre "codigo del proyecto" y "datos del usuario". `~/.wai/`
+con modo 700 mantiene esa separacion explicita.
+
+### Por que `#` esta reservado en el scope
+
+El archivo usa `#` para comentarios (una linea, cero friccion). Si una
+entrada pudiera empezar con `#`, un lector casual no podria distinguir
+"comentario" de "red con nombre raro". scope_add lo rechaza en el
+punto de entrada; scope_read lo filtra en la lectura. La regla es
+chica, pero se aplica en ambos extremos.
+
 ### Por que install.sh usa symlink y no copia
 
 El entrypoint es un puntero vivo al repo. Un symlink hace que `git pull`
@@ -204,9 +277,13 @@ source.
 ### Por que hay tests ahora
 
 Los subcomandos de red requieren hardware Wi-Fi en modo monitor y
-root, pero cuatro capas se ejercitan sin tocar la red:
+root, pero varias capas se ejercitan sin tocar la red:
 
-    tests/cli.bats      dispatch, -V, -h, subcomando invalido.
+    tests/cli.bats      dispatch: -V, --help, sin args, subcomando
+                        invalido.
+    tests/help.bats     indice + `-h` por subcomando (un representante
+                        basta, la rama es una sola) + invariante de
+                        que `-h` no dispara cleanup.
     tests/args.bats     validacion de formato por subcomando
                         (BSSID, MAC, canal, faltantes, opciones
                         desconocidas). Corren antes de preflight.
@@ -216,6 +293,10 @@ root, pero cuatro capas se ejercitan sin tocar la red:
     tests/monitor.bats  comportamiento de los chequeos de seguridad:
                         iface lleva SSH -> die; sin otra wifi con IP ->
                         die salvo WAI_FORCE=1.
+    tests/scope.bats    contrato del scope: dedupe, rechazo de `#`,
+                        comentarios y vacias ignoradas, permiso 600.
+    tests/run.bats      contrato de run: orden del scope, `-o` redirige,
+                        `-i` obligatorio.
 
 `bash tests/run.sh` imprime una linea por test con [N/total], el
 archivo y el titulo. Sin \r, sin contadores in-place: un paste del

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # wai -- WPA2 Handshake Capture CLI.
-# Usage: sudo wai <cap|scan|mon|deth|opt> [flags]
+# Usage: sudo wai <cap|scan|mon|deth|opt|scope|run> [flags]
 # AUTHORIZED NETWORKS ONLY -- educational / lab use.
 
 if [ -z "$BASH_VERSION" ]; then
@@ -26,21 +26,22 @@ source "${LIB_DIR}/clients.sh"
 source "${LIB_DIR}/deauth.sh"
 source "${LIB_DIR}/capture.sh"
 source "${LIB_DIR}/output.sh"
+source "${LIB_DIR}/scope.sh"
 
 main() {
     local sub="${1:-}"
     local arg2="${2:-}"
 
-    # Per-subcommand help: intercept BEFORE any preflight or trap, so
-    # 'wai <sub> -h' works without root and without cleanup noise.
     case "${arg2}" in
     -h | --help)
         case "${sub}" in
-        cap)  help_cap;  exit 0 ;;
-        scan) help_scan; exit 0 ;;
-        mon)  help_mon;  exit 0 ;;
-        deth) help_deth; exit 0 ;;
-        opt)  help_opt;  exit 0 ;;
+        cap)   help_cap;   exit 0 ;;
+        scan)  help_scan;  exit 0 ;;
+        mon)   help_mon;   exit 0 ;;
+        deth)  help_deth;  exit 0 ;;
+        opt)   help_opt;   exit 0 ;;
+        scope) help_scope; exit 0 ;;
+        run)   help_run;   exit 0 ;;
         esac
         ;;
     esac
@@ -48,24 +49,23 @@ main() {
     shift || true
 
     case "$sub" in
-    cap) cmd_cap "$@" ;;
-    scan) cmd_scan "$@" ;;
-    mon) cmd_mon "$@" ;;
-    deth) cmd_deth "$@" ;;
-    opt) cmd_opt "$@" ;;
+    cap)   cmd_cap "$@" ;;
+    scan)  cmd_scan "$@" ;;
+    mon)   cmd_mon "$@" ;;
+    deth)  cmd_deth "$@" ;;
+    opt)   cmd_opt "$@" ;;
+    scope) cmd_scope "$@" ;;
+    run)   cmd_run "$@" ;;
     -V | --version | version) version ;;
     -h | --help | help | "") usage ;;
     *) die "Unknown subcommand: '${sub}'  (use -h for help)" ;;
     esac
 }
 
-cmd_cap() {
-    parse_cap_args "$@"
-    banner "cap"
-    preflight root
-    install_trap
-    monitor_up
-
+# _run_targets -- comun a 'cap' y 'run': recorre TARGETS_RAW y ejecuta
+# el flujo completo por target. El llamador ya corrio preflight,
+# install_trap y monitor_up.
+_run_targets() {
     local total_targets=${#TARGETS_RAW[@]}
     echo -e "\n${B}${C}  Targets in this session: ${total_targets}${N}" >&2
     for t in "${TARGETS_RAW[@]}"; do echo -e "    ${DIM}-> ${t}${N}" >&2; done
@@ -103,6 +103,15 @@ cmd_cap() {
     done
 
     summary
+}
+
+cmd_cap() {
+    parse_cap_args "$@"
+    banner "cap"
+    preflight root
+    install_trap
+    monitor_up
+    _run_targets
 }
 
 cmd_scan() {
@@ -203,6 +212,42 @@ cmd_opt() {
         optimize
     done
     summary
+}
+
+cmd_scope() {
+    parse_scope_args "$@"
+    local sub="${1:-show}"
+    case "$sub" in
+    show | "") scope_show ;;
+    edit)      scope_edit ;;
+    add)       shift; scope_add "${1:-}" ;;
+    rm)        shift; scope_rm  "${1:-}" ;;
+    clear)     scope_clear ;;
+    -h | --help) help_scope ;;
+    *) die "scope: subcomando desconocido '${sub}'  (show|edit|add|rm|clear)" ;;
+    esac
+}
+
+cmd_run() {
+    parse_run_args "$@"
+    banner "run"
+    preflight root
+    install_trap
+    scope_init
+    local entries
+    entries="$(scope_read)"
+    if [[ -z "$entries" ]]; then
+        warn "scope vacio: ${SCOPE_FILE}"
+        warn "agrega entradas con: wai scope add <SSID|BSSID>"
+        return 0
+    fi
+    TARGETS_RAW=()
+    while IFS= read -r l; do
+        TARGETS_RAW+=("$l")
+    done <<< "$entries"
+    info "capturas -> ${OUTDIR}"
+    monitor_up
+    _run_targets
 }
 
 main "$@"

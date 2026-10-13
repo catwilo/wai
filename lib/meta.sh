@@ -58,8 +58,6 @@ BSSID=${TARGET}
 CHANNEL=${CHANNEL}
 IFACE=${IFACE}
 OUTDIR=${OUTDIR}
-IWD_WAS_UP=${IWD_WAS_UP}
-IWD_NET=${IWD_NET}
 HOSTNAME=$(hostname 2>/dev/null || echo unknown)
 KERNEL=$(uname -r 2>/dev/null || echo unknown)
 EOF
@@ -95,7 +93,6 @@ load_meta() {
             return 1
         }
 
-    # Validaciones de integridad
     if [[ -z "$ts" || -z "$bssid" || -z "$channel" ]]; then
         warn "Corrupt cache (empty fields) -- discarding."
         rm -f "$META_FILE"

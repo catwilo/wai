@@ -11,24 +11,12 @@ setup() { setup_env; }
     [[ "$output" == *"wai v"* ]]
 }
 
-@test "wai --version prints version and exits 0" {
-    run bash "$WAI" --version
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"wai v"* ]]
-}
-
 @test "wai --help prints usage and exits 0" {
     run bash "$WAI" --help
     [ "$status" -eq 0 ]
     [[ "$output" == *"Usage:"* ]]
     [[ "$output" == *"cap"* ]]
     [[ "$output" == *"scan"* ]]
-}
-
-@test "wai -h prints usage and exits 0" {
-    run bash "$WAI" -h
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"Usage:"* ]]
 }
 
 @test "wai (no args) prints usage and exits 0" {

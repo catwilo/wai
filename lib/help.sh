@@ -276,3 +276,66 @@ version() {
     echo "wai v${VER}"
     exit 0
 }
+
+# ---------------------------------------------------------------------------
+# help_scope
+# ---------------------------------------------------------------------------
+help_scope() {
+    _help_title "scope -- list of authorized lab networks"
+    printf '\n' >&2
+    _help_note "  wai scope                  show path + entries"
+    _help_note "  wai scope edit             open \$EDITOR on the file"
+    _help_note "  wai scope add <SSID|BSSID> append an entry"
+    _help_note "  wai scope rm  <SSID|BSSID> remove an entry"
+    _help_note "  wai scope clear            empty the file (asks for confirmation)"
+
+    _help_section "WHAT IT DOES"
+    _help_item "Manages ~/.wai/scope: a plain-text list of networks you"
+    _help_item "authorize for capture. One entry per line (SSID or BSSID)."
+    _help_item "Lines starting with '#' are comments. Blank lines are ignored."
+    _help_item "Editing with a normal editor is expected and supported."
+
+    _help_section "FILES"
+    _help_item "~/.wai/scope       the list (mode 600)"
+    _help_item "~/.wai/            parent dir (mode 700)"
+    _help_item "~/.wai/captures/   output dir for 'wai run' (mode 700)"
+
+    _help_section "SAFETY"
+    _help_item "'wai scan' NEVER writes here. You promote entries by hand,"
+    _help_item "so no network is captured without an explicit decision."
+    printf '\n' >&2
+}
+
+# ---------------------------------------------------------------------------
+# help_run
+# ---------------------------------------------------------------------------
+help_run() {
+    _help_title "run -- capture every network in the scope"
+    printf '\n' >&2
+    _help_note "  sudo wai run -i <iface> [-o <dir>] [-n]"
+
+    _help_section "WHAT IT DOES"
+    _help_item "1. Read ~/.wai/scope (comments and blank lines ignored)."
+    _help_item "2. For each entry, run the full 'cap' flow in order."
+    _help_item "3. Store every .cap / .22000 / .hccapx / .info in the"
+    _help_item "   output directory (default ~/.wai/captures/run-<ts>/)."
+    _help_item "4. Print one consolidated summary at the end."
+
+    _help_section "FILES WRITTEN"
+    _help_item "<dir>/<ssid>_<MAC>.cap / .22000 / .hccapx / .info"
+    _help_dim  "dir = -o <dir>  or  ~/.wai/captures/run-<YYYYMMDD-HHMMSS>/"
+
+    _help_section "FLAGS"
+    _help_key "-i <iface>" "Physical WiFi interface (required)"
+    _help_key "-o <dir>"   "Output directory (default: ~/.wai/captures/run-<ts>/)"
+    _help_key "-n"         "Dry-run: no network, no filesystem changes"
+    _help_key "-h"         "This help"
+    _help_key "-V"         "Version"
+
+    _help_section "EXAMPLES"
+    _help_item "wai scope add MiRed"
+    _help_item "wai scope add AA:BB:CC:DD:EE:FF"
+    _help_item "sudo wai run -i wlan0"
+    _help_item "sudo wai run -i wlan0 -n        # dry-run"
+    printf '\n' >&2
+}
