@@ -17,8 +17,10 @@ es la herramienta que controla las antenas. Instala wifi-setup primero:
 
     ./install.sh
 
-Crea un symlink en `~/.local/bin/wai`. Requiere root para ejecutar
-(excepto `opt` y `scope`, que no tocan la red).
+Crea un symlink en `$PREFIX/bin/wai` (Termux) o `~/.local/bin/wai`
+(Debian/generic), el que exista primero. Verifica la instalacion
+corriendo `wai -V` al final. Requiere root para ejecutar (excepto
+`opt` y `scope`, que no tocan la red).
 
 ## Uso
 

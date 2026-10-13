@@ -27,33 +27,39 @@ help_index() {
     _help_note  "        wai <subcommand> -h        detailed help for one subcommand"
 
     _help_section "SUBCOMMANDS"
-    _help_key "cap"  "Full flow: scan -> monitor -> deauth -> capture -> optimize"
-    _help_key "scan" "Scan and list visible networks only"
-    _help_key "mon"  "Enable/disable monitor:  wai mon -i <iface> on|off"
-    _help_key "deth" "Directed deauth:  wai deth -i <iface> -t <BSSID> -c <MAC>"
-    _help_key "opt"  "Convert existing .cap files:  wai opt -o <dir> <file.cap>..."
+    _help_key "cap"   "Full flow: scan -> monitor -> deauth -> capture -> optimize"
+    _help_key "scan"  "Scan and list visible networks only"
+    _help_key "mon"   "Enable/disable monitor:  wai mon -i <iface> on|off"
+    _help_key "deth"  "Directed deauth:  wai deth -i <iface> -t <BSSID> -c <MAC>"
+    _help_key "opt"   "Convert existing .cap files:  wai opt -o <dir> <file.cap>..."
+    _help_key "scope" "Manage ~/.wai/scope (list of authorized networks)"
+    _help_key "run"   "Run 'cap' flow over every entry in the scope"
 
     _help_section "COMMON FLAGS"
-    _help_key "-i" "Physical interface (e.g. wlan0)          [cap|scan|mon|deth]"
+    _help_key "-i" "Physical interface (e.g. wlan0)          [cap|scan|mon|deth|run]"
     _help_key "-t" "BSSID or SSID (repeatable on cap)        [cap|deth]"
     _help_key "-c" "Channel (cap/scan) / client MAC (deth)   [cap|scan|deth]"
-    _help_key "-o" "Output directory (default: pwd)          [cap|opt]"
+    _help_key "-o" "Output directory                         [cap|opt|run]"
     _help_key "-n" "Dry-run: print actions, change nothing   [all]"
     _help_key "-h" "Help                                     [all]"
     _help_key "-V" "Version                                  [all]"
 
     _help_section "ROUTES (where things live)"
-    _help_item "captures  <dir from -o>  or  \$(pwd)    .cap + .22000 / .hccapx + .info"
+    _help_item "scope     ~/.wai/scope                   list of authorized networks (mode 600)"
+    _help_item "captures  ~/.wai/captures/run-<ts>/      'wai run' output (mode 700)"
+    _help_item "          or <dir from -o>  or  \$(pwd)    'wai cap' / 'wai opt' output"
     _help_item "cache     ~/.local/share/wai/            metadata of scanned networks"
     _help_item "temp      \$TMPDIR/wai.XXXXXX              per-run scratch, deleted on exit"
-    _help_dim  "Override capture dir with: -o <dir>"
+    _help_dim  "Nothing under ~/.wai/ is versioned: it is lab data."
 
     _help_section "INTERNAL ACTIONS (what each subcommand calls)"
-    _help_key "cap"  "wifi monitor + airodump-ng + aireplay-ng + aircrack-ng + wpaclean"
-    _help_key "scan" "wifi monitor + airodump-ng"
-    _help_key "mon"  "wifi monitor on|off <iface>"
-    _help_key "deth" "wifi monitor + airodump-ng + aireplay-ng"
-    _help_key "opt"  "wpaclean + hcxpcapngtool / cap2hccapx  (local only, no network)"
+    _help_key "cap"   "wifi monitor + airodump-ng + aireplay-ng + aircrack-ng + wpaclean"
+    _help_key "scan"  "wifi monitor + airodump-ng"
+    _help_key "mon"   "wifi monitor on|off <iface>"
+    _help_key "deth"  "wifi monitor + airodump-ng + aireplay-ng"
+    _help_key "opt"   "wpaclean + hcxpcapngtool / cap2hccapx  (local only, no network)"
+    _help_key "scope" "none (reads/writes ~/.wai/scope)"
+    _help_key "run"   "same as cap, once per entry in ~/.wai/scope"
 
     _help_section "EXAMPLES"
     _help_item "sudo wai cap -i wlan0 -t MiRed -t AA:BB:CC:DD:EE:FF"
@@ -62,9 +68,11 @@ help_index() {
     _help_item "sudo wai mon -i wlan0 on"
     _help_item "sudo wai deth -i wlan0 -t AA:BB:CC:DD:EE:FF -c 11:22:33:44:55:66"
     _help_item "sudo wai opt -o ~/caps cap1.cap cap2.cap"
+    _help_item "wai scope add MiRed && sudo wai run -i wlan0"
 
     _help_section "PER-SUBCOMMAND HELP"
-    _help_item "wai cap -h   wai scan -h   wai mon -h   wai deth -h   wai opt -h"
+    _help_item "wai cap -h   wai scan -h   wai mon -h   wai deth -h"
+    _help_item "wai opt -h   wai scope -h  wai run -h"
     printf '\n' >&2
 }
 
@@ -132,7 +140,7 @@ help_cap() {
 help_scan() {
     _help_title "scan -- list visible networks"
     printf '\n' >&2
-    _help_note "  sudo wai scan -i <iface> [-c <ch>] [-n]"
+    _help_note "  sudo wai scan -i <iface> [-c <ch>] [-o <dir>] [-n]"
 
     _help_section "WHAT IT DOES"
     _help_item "1. Enable monitor mode on <iface>  (delegated to 'wifi monitor on')"
@@ -151,7 +159,7 @@ help_scan() {
     _help_section "FLAGS"
     _help_key "-i <iface>" "Physical WiFi interface (required)"
     _help_key "-c <ch>"    "Fixed channel (optional)"
-    _help_key "-o <dir>"   "Output directory (currently unused; reserved)"
+    _help_key "-o <dir>"   "Output directory (accepted for symmetry; scan output is temp)"
     _help_key "-n"         "Dry-run"
     _help_key "-h"         "This help"
 
@@ -270,14 +278,6 @@ help_opt() {
 }
 
 # ---------------------------------------------------------------------------
-# version -- --version / -V.
-# ---------------------------------------------------------------------------
-version() {
-    echo "wai v${VER}"
-    exit 0
-}
-
-# ---------------------------------------------------------------------------
 # help_scope
 # ---------------------------------------------------------------------------
 help_scope() {
@@ -338,4 +338,12 @@ help_run() {
     _help_item "sudo wai run -i wlan0"
     _help_item "sudo wai run -i wlan0 -n        # dry-run"
     printf '\n' >&2
+}
+
+# ---------------------------------------------------------------------------
+# version -- --version / -V.
+# ---------------------------------------------------------------------------
+version() {
+    echo "wai v${VER}"
+    exit 0
 }

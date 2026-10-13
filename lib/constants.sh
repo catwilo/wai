@@ -28,27 +28,9 @@ HAS_TSHARK=""
 # network stack.
 WAI_DRY_RUN="${WAI_DRY_RUN:-0}"
 
-# Per-process temp directory. Cleaned by cleanup().
+# Per-process temp directory. Cleaned by cleanup() for subcommands that
+# call install_trap(). For invocations that never reach install_trap
+# (usage, -V, -h) the trap below covers it, so no temp dir is orphaned.
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/wai.XXXXXX")
 readonly TMP
-
-# _sys: run a command unless WAI_DRY_RUN=1, in which case print it.
-_sys() {
-    if [[ "$WAI_DRY_RUN" == "1" ]]; then
-        dbg "[dry-run] $*"
-        return 0
-    fi
-    "$@"
-}
-
-# _sys_bg: background version. Echoes the PID to stdout; in dry-run it
-# echoes 0 so callers can still use it as a placeholder.
-_sys_bg() {
-    if [[ "$WAI_DRY_RUN" == "1" ]]; then
-        dbg "[dry-run] $* (background)"
-        echo 0
-        return 0
-    fi
-    "$@" &
-    echo $!
-}
+trap 'rm -rf "$TMP"' EXIT

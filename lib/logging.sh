@@ -4,14 +4,23 @@
 #
 # Every function writes to stderr. This is CRITICAL: it lets callers use
 # $(func) without the log messages contaminating the captured value.
+#
+# Colors are gated on TTY: when stdout is not a terminal (redirected to
+# a file, piped into another tool, captured by clipso), the escape
+# sequences are empty strings and the raw text reaches the consumer
+# untouched. Standard convention of the ecosystem.
 
-R='\033[0;31m'
-G='\033[0;32m'
-Y='\033[1;33m'
-C='\033[0;36m'
-B='\033[1m'
-N='\033[0m'
-DIM='\033[2m'
+if [[ -t 1 ]]; then
+    R=$'\033[0;31m'
+    G=$'\033[0;32m'
+    Y=$'\033[1;33m'
+    C=$'\033[0;36m'
+    B=$'\033[1m'
+    N=$'\033[0m'
+    DIM=$'\033[2m'
+else
+    R=''; G=''; Y=''; C=''; B=''; N=''; DIM=''
+fi
 
 ts() { date '+%H:%M:%S'; }
 info() { echo -e "${C}[.]${N} $(ts) $*" >&2; }

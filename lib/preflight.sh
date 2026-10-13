@@ -2,45 +2,64 @@
 # lib/preflight.sh -- Pre-flight verification.
 # Not executed directly. Loaded by the entrypoint.
 #
-# preflight <mode>:
-#   root      require euid 0 (default for cap, scan, mon, deth)
-#   no_root   only verify dependencies (default for opt)
+# preflight <sub>  -- checks the requirements for that subcommand:
+#   cap  -> root + airodump-ng, aireplay-ng, aircrack-ng, wpaclean, wifi
+#   scan -> root + airodump-ng, wifi
+#   mon  -> root + wifi
+#   deth -> root + airodump-ng, aireplay-ng, wifi
+#   opt  -> no root + wpaclean
+#   run  -> same as cap
 #
-# Dependencias obligatorias: aircrack-ng suite (airodump-ng, aireplay-ng,
-# aircrack-ng, wpaclean) + wifi-setup (backend de red).
+# Optional tools (hcxpcapngtool, cap2hccapx, tshark) are detected once
+# and stored in HAS_* regardless of subcommand.
 #
-# iwctl y airmon-ng ya NO son dependencias: el modo monitor se delega a
-# wifi-setup, que maneja NetworkManager. iwd queda como fallback manual
-# del sistema, no es dependencia de wai.
-#
-# Herramientas opcionales (hcxpcapngtool, cap2hccapx, tshark) se detectan
-# UNA vez y se guardan en HAS_*.
+# iwctl and airmon-ng are NOT dependencies: monitor mode is delegated to
+# wifi-setup, which owns the network stack.
+
+_preflight_requires_root() {
+    case "$1" in
+    opt) return 1 ;;
+    *)   return 0 ;;
+    esac
+}
+
+_preflight_deps_for() {
+    case "$1" in
+    cap | run) printf '%s\n' "airodump-ng aireplay-ng aircrack-ng wpaclean wifi" ;;
+    scan)      printf '%s\n' "airodump-ng wifi" ;;
+    mon)       printf '%s\n' "wifi" ;;
+    deth)      printf '%s\n' "airodump-ng aireplay-ng wifi" ;;
+    opt)       printf '%s\n' "wpaclean" ;;
+    *)         printf '' ;;
+    esac
+}
 
 preflight() {
-    local mode="${1:-root}"
+    local sub="${1:-cap}"
     hdr "Pre-flight"
 
     if [[ "$WAI_DRY_RUN" == "1" ]]; then
         warn "DRY-RUN: no system changes will be made."
     fi
 
-    if [[ "$mode" == "root" ]]; then
+    if _preflight_requires_root "$sub"; then
         if [[ $(id -u) -ne 0 ]]; then
             if [[ "$WAI_DRY_RUN" == "1" ]]; then
                 warn "Not root; continuing because --dry-run is set."
             else
-                die "This command requires root: sudo wai <sub> ..."
+                die "This command requires root: sudo wai ${sub} ..."
             fi
         else
             ok "Root: OK"
         fi
     else
-        dbg "Root not required for this subcommand."
+        dbg "Root not required for '${sub}'."
     fi
 
     if [[ "$WAI_DRY_RUN" != "1" ]]; then
         local miss=()
-        for dep in airodump-ng aireplay-ng aircrack-ng wpaclean wifi; do
+        local dep
+        for dep in $(_preflight_deps_for "$sub"); do
             if command -v "$dep" &>/dev/null; then
                 dbg "  dep OK: $dep -> $(command -v "$dep")"
             else
@@ -48,12 +67,13 @@ preflight() {
             fi
         done
         ((${#miss[@]} > 0)) &&
-            die "Missing dependencies: ${miss[*]}\n  -> aircrack-ng: sudo apt install aircrack-ng\n  -> wifi-setup: ut distribute --install wifi-setup"
+            die "Missing dependencies for '${sub}': ${miss[*]}\n  -> aircrack-ng: sudo apt install aircrack-ng\n  -> wifi-setup: ut distribute --install wifi-setup"
         ok "Required dependencies: OK"
     else
         dbg "Dependencies: skipped (dry-run)."
     fi
 
+    local opt
     for opt in hcxpcapngtool cap2hccapx tshark; do
         if command -v "$opt" &>/dev/null; then
             dbg "  optional OK: $opt -> $(command -v "$opt")"

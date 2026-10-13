@@ -15,12 +15,6 @@ banner() {
     echo -e "${DIM}  Shell: ${BASH}${N}\n" >&2
 }
 
-banner() {
-    local sub="$1"
-    echo -e "\n${B}${C}  wai v${VER} -- ${sub}${N}  |  authorized networks only" >&2
-    echo -e "${DIM}  Shell: ${BASH}${N}\n" >&2
-}
-
 _require_iface() {
     [[ -n "$IFACE" ]] || die "Missing required argument: -i <interface>"
 }
@@ -157,10 +151,6 @@ parse_opt_args() {
     _validate_outdir
     dbg "opt args: OUTDIR=${OUTDIR} FILES=(${OPT_FILES[*]}) DRY=${WAI_DRY_RUN}"
 }
-
-# parse_scope_args -- 'wai scope' no acepta flags: los args son
-# posicionales y cmd_scope los interpreta (show|edit|add|rm|clear).
-parse_scope_args() { :; }
 
 # parse_run_args -- 'wai run' recorre el scope y corre el flujo cap
 # por cada entrada. -o es opcional; default ~/.wai/captures/run-<ts>/.

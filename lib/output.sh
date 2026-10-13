@@ -254,3 +254,22 @@ summary() {
     echo -e "${B}${C}══════════════════════════════════════════════════════════════════════${N}" >&2
     echo "" >&2
 }
+
+# opt_run -- entry point for `wai opt`: convert existing .cap files.
+# Loops over OPT_FILES, seeds per-file state, calls optimize. The
+# dispatcher stays a pure router.
+opt_run() {
+    local src
+    for src in "${OPT_FILES[@]}"; do
+        [[ -f "$src" ]] || die "File not found: ${src}"
+        hdr "Optimizing $(basename "$src")"
+        CAP_FILE="$src"
+        TARGET="${TARGET:-$(basename "$src" .cap)}"
+        SSID_NAME="${SSID_NAME:-$TARGET}"
+        CHANNEL="${CHANNEL:-0}"
+        IFACE="${IFACE:-unknown}"
+        MON="${MON:-unknown}"
+        optimize
+    done
+    summary
+}

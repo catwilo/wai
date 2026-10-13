@@ -33,7 +33,6 @@ scope_read() {
     awk '!/^[[:space:]]*#/ && NF' "$SCOPE_FILE"
 }
 
-# scope_add <entry> -- agrega una entrada unica.
 # scope_add <entry> -- agrega una entrada unica. Rechaza vacios y
 # lineas que empezarian con '#' (el archivo usa '#' para comentarios).
 scope_add() {

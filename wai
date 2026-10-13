@@ -2,6 +2,10 @@
 # wai -- WPA2 Handshake Capture CLI.
 # Usage: sudo wai <cap|scan|mon|deth|opt|scope|run> [flags]
 # AUTHORIZED NETWORKS ONLY -- educational / lab use.
+#
+# RESPONSABILIDAD UNICA: dispatch de subcomandos. Cada cmd_<sub>
+# valida argumentos, corre preflight e invoca la funcion del modulo
+# correspondiente. La logica de negocio vive en lib/*.sh.
 
 if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
@@ -32,6 +36,8 @@ main() {
     local sub="${1:-}"
     local arg2="${2:-}"
 
+    # Per-subcommand help: intercept BEFORE preflight / install_trap, so
+    # `wai <sub> -h` works without root and without cleanup noise.
     case "${arg2}" in
     -h | --help)
         case "${sub}" in
@@ -49,75 +55,32 @@ main() {
     shift || true
 
     case "$sub" in
-    cap)   cmd_cap "$@" ;;
-    scan)  cmd_scan "$@" ;;
-    mon)   cmd_mon "$@" ;;
-    deth)  cmd_deth "$@" ;;
-    opt)   cmd_opt "$@" ;;
+    cap)   cmd_cap   "$@" ;;
+    scan)  cmd_scan  "$@" ;;
+    mon)   cmd_mon   "$@" ;;
+    deth)  cmd_deth  "$@" ;;
+    opt)   cmd_opt   "$@" ;;
     scope) cmd_scope "$@" ;;
-    run)   cmd_run "$@" ;;
+    run)   cmd_run   "$@" ;;
     -V | --version | version) version ;;
     -h | --help | help | "") usage ;;
     *) die "Unknown subcommand: '${sub}'  (use -h for help)" ;;
     esac
 }
 
-# _run_targets -- comun a 'cap' y 'run': recorre TARGETS_RAW y ejecuta
-# el flujo completo por target. El llamador ya corrio preflight,
-# install_trap y monitor_up.
-_run_targets() {
-    local total_targets=${#TARGETS_RAW[@]}
-    echo -e "\n${B}${C}  Targets in this session: ${total_targets}${N}" >&2
-    for t in "${TARGETS_RAW[@]}"; do echo -e "    ${DIM}-> ${t}${N}" >&2; done
-    echo "" >&2
-
-    local target_idx=0
-    for raw_target in "${TARGETS_RAW[@]}"; do
-        target_idx=$((target_idx + 1))
-        echo -e "\n${B}${C}==============================================================${N}" >&2
-        echo -e "${B}${C}  TARGET ${target_idx}/${total_targets}: ${raw_target}${N}" >&2
-        echo -e "${B}${C}==============================================================${N}\n" >&2
-
-        _reset_target_state
-        TARGET="$raw_target"
-
-        hdr "Network cache"
-        init_meta
-        if load_meta; then
-            if ((META_LOADED == 1)); then
-                ok "Fresh data - scan skipped."
-            else
-                warn "Stale cache - will re-verify on failure."
-            fi
-        else
-            info "No cache for '${TARGET}' - full scan."
-        fi
-
-        resolve_target
-        if capture; then
-            optimize
-        else
-            warn "Target ${raw_target}: capture finished without handshake."
-            _record_target_failure
-        fi
-    done
-
-    summary
-}
-
 cmd_cap() {
     parse_cap_args "$@"
     banner "cap"
-    preflight root
+    preflight cap
     install_trap
     monitor_up
-    _run_targets
+    run_targets
 }
 
 cmd_scan() {
     parse_scan_args "$@"
     banner "scan"
-    preflight root
+    preflight scan
     install_trap
     monitor_up
     run_scan "$SCAN_SEC"
@@ -130,7 +93,7 @@ cmd_mon() {
     banner "mon"
     case "$MON_ACTION" in
     on)
-        preflight root
+        preflight mon
         install_trap
         monitor_up
         ok "Monitor mode active: ${MON}"
@@ -139,7 +102,7 @@ cmd_mon() {
         trap - EXIT INT TERM
         ;;
     off)
-        preflight root
+        preflight mon
         install_trap
         monitor_down
         ;;
@@ -149,80 +112,28 @@ cmd_mon() {
 cmd_deth() {
     parse_deth_args "$@"
     banner "deth"
-    preflight root
+    preflight deth
     install_trap
     monitor_up
-
-    TARGET="${BSSID^^}"
-    SSID_NAME="$TARGET"
-    hdr "Directed deauth - BSSID=${TARGET}  Client=${CLIENT_MAC}  Channel=${CHANNEL:-auto}"
-
-    if [[ -z "$CHANNEL" ]]; then
-        if [[ "$WAI_DRY_RUN" == "1" ]]; then
-            CHANNEL=6
-            dbg "[dry-run] channel auto-resolved to ${CHANNEL}"
-        else
-            info "Channel not given - scanning to resolve it..."
-            run_scan "$SCAN_SEC"
-            CHANNEL=$(awk -F',' -v b="${TARGET}" '
-                /^[0-9A-Fa-f]{2}:/ {
-                    gsub(/ /,"",$1); gsub(/ /,"",$4)
-                    if (toupper($1)==b) { print $4; exit }
-                }' "${TMP}/scan-01.csv")
-            if [[ -z "$CHANNEL" ]]; then
-                die "Channel not found for ${TARGET}. Use -c <channel>."
-            fi
-            ok "Channel resolved: ${CHANNEL}"
-        fi
-    fi
-
-    local log="${TMP}/deth.log"
-    info "Sending ${DEAUTH_N} deauth frames to ${CLIENT_MAC} via ${MON}..."
-    if [[ "$WAI_DRY_RUN" == "1" ]]; then
-        dbg "[dry-run] aireplay-ng --deauth ${DEAUTH_N} -a ${TARGET} -c ${CLIENT_MAC} ${MON}"
-    else
-        if aireplay-ng \
-            --deauth "$DEAUTH_N" \
-            -a "$TARGET" \
-            -c "$CLIENT_MAC" \
-            "$MON" >"$log" 2>&1; then
-            ok "Deauth sent."
-        else
-            warn "aireplay-ng failed. Log:"
-        fi
-        while IFS= read -r l; do dbg "  $l"; done <"$log" || true
-    fi
+    deth_run
 }
 
 cmd_opt() {
     parse_opt_args "$@"
     banner "opt"
-    preflight no_root
+    preflight opt
     install_trap
-
-    for src in "${OPT_FILES[@]}"; do
-        [[ -f "$src" ]] || die "File not found: ${src}"
-        hdr "Optimizing $(basename "$src")"
-        CAP_FILE="$src"
-        TARGET="${TARGET:-$(basename "$src" .cap)}"
-        SSID_NAME="${SSID_NAME:-$TARGET}"
-        CHANNEL="${CHANNEL:-0}"
-        IFACE="${IFACE:-unknown}"
-        MON="${MON:-unknown}"
-        optimize
-    done
-    summary
+    opt_run
 }
 
 cmd_scope() {
-    parse_scope_args "$@"
     local sub="${1:-show}"
     case "$sub" in
-    show | "") scope_show ;;
-    edit)      scope_edit ;;
-    add)       shift; scope_add "${1:-}" ;;
-    rm)        shift; scope_rm  "${1:-}" ;;
-    clear)     scope_clear ;;
+    show | "")   scope_show ;;
+    edit)        scope_edit ;;
+    add)         shift; scope_add "${1:-}" ;;
+    rm)          shift; scope_rm  "${1:-}" ;;
+    clear)       scope_clear ;;
     -h | --help) help_scope ;;
     *) die "scope: subcomando desconocido '${sub}'  (show|edit|add|rm|clear)" ;;
     esac
@@ -231,7 +142,7 @@ cmd_scope() {
 cmd_run() {
     parse_run_args "$@"
     banner "run"
-    preflight root
+    preflight run
     install_trap
     scope_init
     local entries
@@ -242,12 +153,13 @@ cmd_run() {
         return 0
     fi
     TARGETS_RAW=()
+    local l
     while IFS= read -r l; do
         TARGETS_RAW+=("$l")
     done <<< "$entries"
     info "capturas -> ${OUTDIR}"
     monitor_up
-    _run_targets
+    run_targets
 }
 
 main "$@"

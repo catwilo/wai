@@ -22,7 +22,7 @@ _scan_clients_fixed() {
     rm -f "${TMP}/clients-01.csv" 2>/dev/null || true
 
     info "Scanning clients on '${SSID_NAME}' (channel ${CHANNEL}, ${SCAN_CLIENT_SEC}s)..."
-    dbg "  airodump-ng --bssid ${TARGET} --channel ${CHANNEL} → ${TMP}/clients"
+    dbg "  airodump-ng --bssid ${TARGET} --channel ${CHANNEL} -> ${TMP}/clients"
 
     # CRÍTICO: --bssid + --channel fijos evita que airodump salte canales.
     # Without this, the AP's clients appear sporadically or not at all.

@@ -5,13 +5,14 @@
     entrypoint (wai)  ->  subcomandos  ->  lib/*.sh  ->  binarios externos
                                                           + wifi-setup (red)
 
-`wai` es un bash script unico que delega cada subcomando a `cmd_<name>`.
-Cada `cmd_<name>` compone funciones de los modulos de `lib/`. Los modulos no
-se llaman entre si fuera del orden declarado en el entrypoint.
+`wai` es el dispatcher: parsea, corre preflight y delega. Cada
+`cmd_<name>` es una funcion corta (5-10 lineas) que sigue el mismo
+patron: parse -> banner -> preflight -> install_trap -> modulo.
+La logica de negocio vive en `lib/*.sh`.
 
 ## Principio de responsabilidades
 
-wai es un CONSUMIDOR de la red. wifi-setup es el DUEÑO de la red.
+wai es un CONSUMIDOR de la red. wifi-setup es el DUENO de la red.
 
 - wai captura handshakes WPA2 (airodump-ng, aireplay-ng, aircrack-ng).
 - wifi-setup gestiona las antenas, el modo managed/monitor y NetworkManager.
@@ -23,20 +24,23 @@ otro gestor, wai no se entera.
 
 ## Subcomandos
 
-    cap     preflight root -> install_trap -> monitor_up -> _run_targets
-    scan    preflight root -> install_trap -> monitor_up -> run_scan
-    mon     preflight root -> install_trap -> monitor_up (on)
-            preflight root -> install_trap -> monitor_down (off)
-    deth    preflight root -> install_trap -> monitor_up -> aireplay-ng
-    opt     preflight no_root -> install_trap -> loop optimize
+    cap     parse -> preflight cap -> install_trap -> monitor_up
+            -> run_targets (capture.sh)
+    scan    parse -> preflight scan -> install_trap -> monitor_up
+            -> run_scan
+    mon     parse -> preflight mon -> install_trap
+            -> monitor_up (on) / monitor_down (off)
+    deth    parse -> preflight deth -> install_trap -> monitor_up
+            -> deth_run (deauth.sh)
+    opt     parse -> preflight opt -> install_trap -> opt_run (output.sh)
     scope   sin preflight, sin trap: gestiona ~/.wai/scope
-    run     preflight root -> install_trap -> scope_init -> monitor_up
-            -> _run_targets
+    run     parse -> preflight run -> install_trap -> scope_init
+            -> monitor_up -> run_targets (identico a cap)
 
 `opt` y `scope` no tocan la red: `opt` solo convierte `.cap` locales,
-`scope` solo edita un archivo en `~/.wai/`. `run` reutiliza el flujo de
-`cap`: ambos comparten `_run_targets`, la unica copia del bucle por
-target.
+`scope` solo edita un archivo en `~/.wai/`. `run` reutiliza `run_targets`
+de `capture.sh`: `cap` y `run` comparten el bucle completo; la unica
+diferencia es de donde salen los targets (`-t` vs `~/.wai/scope`).
 
 ## Estado persistente del usuario
 
@@ -54,11 +58,14 @@ borrarse y reinstalarse sin perder capturas ni scope.
 
 ### Raiz
 
-    wai             Entrypoint. Carga modulos en orden, despacha a
-                    `cmd_<sub>`. Contiene `_run_targets`, el bucle comun
-                    a `cap` y `run`.
+    wai             Dispatcher. Carga modulos en orden, enruta
+                    `-h`/`--help` por subcomando ANTES de preflight, y
+                    ejecuta los `cmd_<sub>` (que son finos: parse ->
+                    preflight -> modulo).
 
-    install.sh      Symlink a ~/.local/bin/wai. Nunca copia.
+    install.sh      Symlink a $PREFIX/bin/wai (Termux) o
+                    ~/.local/bin/wai (Debian). Nunca copia. Verifica
+                    con `wai -V` al final.
 
     README.md       Usuario: que hace, como se instala, como se usa,
                     flags comunes, scope, dry-run, backend wifi-setup.
@@ -73,12 +80,17 @@ borrarse y reinstalarse sin perder capturas ni scope.
 ### lib/
 
     constants.sh    Version, tiempos, rutas, flags de herramientas
-                    opcionales, TMP, WAI_DRY_RUN. Helpers `_sys` / `_sys_bg`
-                    que respetan el dry-run.
+                    opcionales, WAI_DRY_RUN, TMP. TMP se crea al cargar
+                    el modulo con un trap que lo limpia en EXIT incluso
+                    si el subcomando nunca llega a install_trap (asi
+                    `wai -h` no deja basura en $TMPDIR).
 
-    logging.sh      info/ok/warn/hdr/sep/die/dbg + colores ANSI. Todas
-                    escriben a stderr. CRITICO: permite usar $(func) sin
-                    que los mensajes contaminen el valor capturado.
+    logging.sh      info/ok/warn/hdr/sep/die/dbg + colores ANSI. Los
+                    colores se calculan UNA vez segun `[[ -t 1 ]]`:
+                    cuando stdout no es terminal, todas las variables
+                    son strings vacios y el texto sale crudo. Todas las
+                    funciones escriben a stderr (CRITICO: permite usar
+                    $(func) sin contaminar el valor capturado).
 
     help.sh         help_index + help_<sub>. Unico lugar del texto de
                     ayuda. El dispatcher enruta -h/--help ANTES de
@@ -95,20 +107,26 @@ borrarse y reinstalarse sin perder capturas ni scope.
                     cleanup mata capturadores vivos y delega el regreso
                     a managed a `wifi monitor off` via monitor_down().
 
-    args.sh         Un `parse_<sub>_args` por subcomando + `usage` (alias
-                    de help_index) + `banner`. Valida formatos (BSSID,
-                    MAC, canal) y crea OUTDIR. Unico lugar donde se leen
-                    flags.
+    args.sh         Un `parse_<sub>_args` por subcomando (excepto
+                    `scope`, cuyos args son posicionales) + `usage`
+                    (alias de help_index) + `banner`. Valida formatos
+                    (BSSID, MAC, canal) y crea OUTDIR. Unico lugar donde
+                    se leen flags.
 
-    preflight.sh    preflight <root|no_root>. Dependencias obligatorias:
-                    airodump-ng, aireplay-ng, aircrack-ng, wpaclean, wifi.
+    preflight.sh    preflight <sub>: chequea root y dependencias
+                    apropiadas al subcomando.
+                      cap  -> root + airodump-ng, aireplay-ng, aircrack-ng, wpaclean, wifi
+                      scan -> root + airodump-ng, wifi
+                      mon  -> root + wifi
+                      deth -> root + airodump-ng, aireplay-ng, wifi
+                      opt  -> no root + wpaclean
+                      run  -> same as cap
                     Detecta herramientas opcionales (hcxpcapngtool,
                     cap2hccapx, tshark) UNA sola vez y las guarda en HAS_*.
 
     meta.sh         Per-network metadata cache in
                     ${XDG_DATA_HOME:-~/.local/share}/wai/<slug>.meta
-                    with a one-time migration from the legacy
-                    ~/wssids path in init_meta().
+                    con migracion one-time desde ~/wssids en init_meta().
                     TTL: META_MAX_AGE. Integrity checked on read.
 
     scope.sh        ~/.wai/scope + CAPTURES_DIR. Lista de redes
@@ -134,26 +152,25 @@ borrarse y reinstalarse sin perder capturas ni scope.
                     get_client_macs como interfaz publica.
 
     deauth.sh       _deauth_burst (todos los clientes en paralelo +
-                    broadcast) y run_deauth (orquesta rondas). Devuelve
-                    PID del subshell para que capture.sh lo mate.
+                    broadcast), run_deauth (rondas; devuelve PID para
+                    capture.sh) y deth_run (entry point de `wai deth`).
 
-    capture.sh      capture_once (airodump-ng -> deauth -> monitor de
-                    handshake) y capture (reintentos + re-escaneo si
-                    cache expirada). Verificacion con aircrack-ng y
-                    tshark. Bajo dry-run, captura se simula.
+    capture.sh      _hs_tshark / _hs_aircrack / _check_handshake,
+                    _monitor_capture (event-driven), capture_once,
+                    capture (reintentos + re-escaneo si cache expirada)
+                    y run_targets (bucle comun a cap y run).
 
-    output.sh       optimize (wpaclean + conversion a .22000/.hccapx +
-                    .info) y summary (resumen consolidado). Bajo dry-run,
-                    optimize imprime las rutas que escribiria y no crea
-                    archivos.
+    output.sh       _build_basename, optimize (wpaclean + conversion a
+                    .22000/.hccapx + .info), _record_target_failure,
+                    summary y opt_run (entry point de `wai opt`).
 
 ## Flujo de `cap`
 
     parse_cap_args -> banner
-    -> preflight root
+    -> preflight cap
     -> install_trap
     -> monitor_up  (valida seguridad + delega a `wifi monitor on`)
-    -> _run_targets:
+    -> run_targets (capture.sh):
         _reset_target_state
         -> init_meta -> load_meta (o escaneo completo)
         -> resolve_target (BSSID, canal)
@@ -170,22 +187,17 @@ borrarse y reinstalarse sin perder capturas ni scope.
 ## Flujo de `run`
 
     parse_run_args -> banner
-    -> preflight root
+    -> preflight run
     -> install_trap
     -> scope_init (crea ~/.wai/ y ~/.wai/scope si faltan)
     -> scope_read -> TARGETS_RAW[]
     -> monitor_up
-    -> _run_targets (identico al de `cap`, sin duplicar codigo)
+    -> run_targets (identico al de `cap`, sin duplicar codigo)
     -> summary
-
-`run` no toca `scan`, `clients`, `deauth`, `capture` ni `output`
-directamente: reusa el mismo pipeline que `cap` via `_run_targets`.
-La unica diferencia con `cap` es de donde salen los targets: `cap` los
-recibe como `-t`, `run` los lee de `~/.wai/scope`.
 
 ## Decisiones no obvias
 
-### Por que wifi-setup es el dueño de la red y wai solo el consumidor
+### Por que wifi-setup es el dueno de la red y wai solo el consumidor
 
 wai captura handshakes; no necesita saber si el gestor de red es NM, iwd
 o networkd. Antes cada cambio de stack obligaba a tocar wai. Ahora wai
@@ -199,6 +211,38 @@ Cada fase es una operacion con valor propio: `scan` sin tocar la red,
 convertir capturas ya existentes, `deth` para depurar un cliente
 especifico, `scope` para revisar la lista antes de capturar, `run` para
 procesar la lista completa.
+
+### Por que el dispatcher no contiene logica de negocio
+
+Convencion del ecosistema: el entrypoint parsea y despacha. Las
+funciones `cmd_<sub>` hacen `parse -> preflight -> modulo` y nada mas.
+`deth_run`, `opt_run` y `run_targets` viven en los modulos (`deauth.sh`,
+`output.sh`, `capture.sh`). Asi el dispatcher se puede leer de un vistazo
+y cada modulo tiene una responsabilidad clara.
+
+### Por que los colores se deciden al cargar logging.sh
+
+ANSI gating por `[[ -t 1 ]]` en el momento del `source`: si el stdout no
+es terminal (un pipe a `tee`, una captura de clipso, un redirect a
+archivo), las variables `R/G/Y/C/B/N/DIM` quedan como strings vacios.
+Ninguna funcion tiene que preguntar despues; el consumidor recibe texto
+crudo sin escapar. Mismo patron que el resto del ecosistema.
+
+### Por que TMP se limpia con un trap al cargar constants.sh
+
+`TMP` se crea con `mktemp -d` en el `source`. Si un subcomando nunca
+llega a `install_trap` (porque es `-h`, `-V` o un error temprano de
+parse), el directorio quedaria huerfano. El trap `rm -rf "$TMP"` en
+`constants.sh` cubre ese caso sin depender de cleanup(), que solo corre
+cuando ya hay un trap de sistema instalado por un subcomando real.
+
+### Por que preflight chequea dependencias por subcomando
+
+`opt` no toca la red: exigirle `airodump-ng`, `aireplay-ng` o `wifi`
+seria una falsa dependencia. `scan` no necesita `aireplay-ng` ni
+`wpaclean`. `mon` no necesita `airodump-ng`. `_preflight_deps_for` y
+`_preflight_requires_root` centralizan esa matriz; agregar un subcomando
+es tocar solo esos dos `case`.
 
 ### Por que todos los logs van a stderr
 

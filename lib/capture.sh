@@ -292,3 +292,48 @@ capture() {
         return 1
     fi
 }
+
+# run_targets -- walk TARGETS_RAW and run the full flow for each one.
+# Shared by `cap` (targets from -t) and `run` (targets from the scope).
+# Caller has already run preflight, install_trap and monitor_up.
+run_targets() {
+    local total_targets=${#TARGETS_RAW[@]}
+    echo -e "\n${B}${C}  Targets in this session: ${total_targets}${N}" >&2
+    local t
+    for t in "${TARGETS_RAW[@]}"; do echo -e "    ${DIM}-> ${t}${N}" >&2; done
+    echo "" >&2
+
+    local target_idx=0
+    local raw_target
+    for raw_target in "${TARGETS_RAW[@]}"; do
+        target_idx=$((target_idx + 1))
+        echo -e "\n${B}${C}==============================================================${N}" >&2
+        echo -e "${B}${C}  TARGET ${target_idx}/${total_targets}: ${raw_target}${N}" >&2
+        echo -e "${B}${C}==============================================================${N}\n" >&2
+
+        _reset_target_state
+        TARGET="$raw_target"
+
+        hdr "Network cache"
+        init_meta
+        if load_meta; then
+            if ((META_LOADED == 1)); then
+                ok "Fresh data - scan skipped."
+            else
+                warn "Stale cache - will re-verify on failure."
+            fi
+        else
+            info "No cache for '${TARGET}' - full scan."
+        fi
+
+        resolve_target
+        if capture; then
+            optimize
+        else
+            warn "Target ${raw_target}: capture finished without handshake."
+            _record_target_failure
+        fi
+    done
+
+    summary
+}
