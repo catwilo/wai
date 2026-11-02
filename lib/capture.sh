@@ -51,9 +51,10 @@ _check_handshake() {
 
     # tshark — frames EAPOL (handshake parcial también es crackeable)
     local eapol_count=0
-    [[ -n "$HAS_TSHARK" ]] &&
+    if [[ -n "$HAS_TSHARK" ]]; then
         eapol_count=$(tshark -r "$cap_file" -Y "eapol" -T fields \
             -e frame.number 2>/dev/null | wc -l) || true
+    fi
 
     if ((hs_count > 0)); then
         ok "Handshake captured! (aircrack: ${hs_count} | EAPOL: ${eapol_count} frames)"

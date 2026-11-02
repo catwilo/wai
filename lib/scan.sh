@@ -3,7 +3,7 @@
 # Not executed directly. Loaded by the entrypoint.
 
 run_scan() {
-    local duration="${1:-$SCAN_SEC}"
+    local duration="$SCAN_SEC"
     if [[ "$WAI_DRY_RUN" == "1" ]]; then
         dbg "[dry-run] airodump-ng scan (${duration}s) on $MON"
         return 0
