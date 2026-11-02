@@ -1,1 +1,6 @@
 disable=SC1091,SC2034,SC2153
+# SC2088: tilde entre comillas en lib/help.sh. Es intencional: son textos
+# de ayuda que el usuario lee tal cual (~/.wai/scope, ~/.local/share/wai).
+# Expandir a $HOME imprimiria rutas absolutas y haria la documentacion
+# menos legible.
+disable=SC2088
